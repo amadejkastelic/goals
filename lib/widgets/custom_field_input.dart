@@ -7,12 +7,14 @@ class CustomFieldInput extends StatefulWidget {
   final CustomFieldDefinition definition;
   final String? initialValue;
   final void Function(String) onChanged;
+  final bool readOnly;
 
   const CustomFieldInput({
     super.key,
     required this.definition,
     this.initialValue,
     required this.onChanged,
+    this.readOnly = false,
   });
 
   @override
@@ -105,6 +107,9 @@ class _CustomFieldInputState extends State<CustomFieldInput> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.readOnly) {
+      return _buildReadOnly();
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -116,6 +121,59 @@ class _CustomFieldInputState extends State<CustomFieldInput> {
         _buildInput(),
       ],
     );
+  }
+
+  Widget _buildReadOnly() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          widget.definition.name,
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+        ),
+        const SizedBox(height: 4),
+        Text(_getDisplayValue()),
+      ],
+    );
+  }
+
+  String _getDisplayValue() {
+    if (_value == null) return 'Not set';
+
+    switch (widget.definition.fieldType) {
+      case CustomFieldType.checkboxes:
+        final selected = _value as Set<String>;
+        if (selected.isEmpty) return 'None selected';
+        return selected.join(', ');
+      case CustomFieldType.text:
+        final text = _value as String;
+        return text.isEmpty ? 'Not set' : text;
+      case CustomFieldType.number:
+        return _value.toString();
+      case CustomFieldType.date:
+        final date = _value as DateTime?;
+        return date != null ? DateFormat.yMMMd().format(date) : 'Not set';
+      case CustomFieldType.time:
+        final timeStr = _value as String?;
+        if (timeStr == null || timeStr.isEmpty) return 'Not set';
+        final parts = timeStr.split(':');
+        if (parts.length >= 2) {
+          final time = TimeOfDay(
+            hour: int.tryParse(parts[0]) ?? 0,
+            minute: int.tryParse(parts[1]) ?? 0,
+          );
+          return time.format(context);
+        }
+        return timeStr;
+      case CustomFieldType.dropdown:
+      case CustomFieldType.radio:
+        return _value?.toString() ?? 'Not set';
+      case CustomFieldType.rating:
+        final rating = _value as int;
+        return '★' * rating + '☆' * (5 - rating);
+    }
   }
 
   Widget _buildInput() {

@@ -5,6 +5,7 @@ import '../db/database_helper.dart';
 
 class CustomFieldsProvider with ChangeNotifier {
   final Map<int, List<CustomFieldDefinition>> _definitionsByGoal = {};
+  final Map<int, List<CustomFieldDefinition>> _entrySpecificDefinitions = {};
   final Map<int, List<CustomFieldValue>> _valuesByEntry = {};
   final Map<int, bool> _loadingByGoal = {};
   String? error;
@@ -48,7 +49,9 @@ class CustomFieldsProvider with ChangeNotifier {
   Future<bool> addDefinition(CustomFieldDefinition def) async {
     try {
       await DatabaseHelper.instance.createCustomFieldDefinition(def);
-      await loadDefinitionsForGoal(def.goalId);
+      if (def.goalId != null) {
+        await loadDefinitionsForGoal(def.goalId!);
+      }
       return true;
     } catch (e) {
       error = 'Failed to add custom field: $e';
@@ -60,7 +63,9 @@ class CustomFieldsProvider with ChangeNotifier {
   Future<bool> updateDefinition(CustomFieldDefinition def) async {
     try {
       await DatabaseHelper.instance.updateCustomFieldDefinition(def);
-      await loadDefinitionsForGoal(def.goalId);
+      if (def.goalId != null) {
+        await loadDefinitionsForGoal(def.goalId!);
+      }
       return true;
     } catch (e) {
       error = 'Failed to update custom field: $e';
@@ -123,7 +128,9 @@ class CustomFieldsProvider with ChangeNotifier {
     Map<int, String> values,
   ) async {
     try {
+      debugPrint('saveAllValuesForEntry: entryId=$entryId, values=$values');
       for (final entry in values.entries) {
+        debugPrint('Saving: definitionId=${entry.key}, value=${entry.value}');
         await DatabaseHelper.instance.saveCustomFieldValue(
           definitionId: entry.key,
           journalEntryId: entryId,
@@ -132,6 +139,7 @@ class CustomFieldsProvider with ChangeNotifier {
       }
       await loadValuesForEntry(entryId);
     } catch (e) {
+      debugPrint('Error saving custom field values: $e');
       error = 'Failed to save custom field values: $e';
       notifyListeners();
     }
@@ -145,5 +153,34 @@ class CustomFieldsProvider with ChangeNotifier {
 
   void clearEntry(int entryId) {
     _valuesByEntry.remove(entryId);
+    _entrySpecificDefinitions.remove(entryId);
+  }
+
+  List<CustomFieldDefinition> getEntrySpecificDefinitions(int entryId) {
+    return _entrySpecificDefinitions[entryId] ?? [];
+  }
+
+  Future<void> loadEntrySpecificDefinitions(int journalEntryId) async {
+    try {
+      _entrySpecificDefinitions[journalEntryId] = await DatabaseHelper.instance
+          .readEntrySpecificDefinitions(journalEntryId);
+      notifyListeners();
+    } catch (e) {
+      _entrySpecificDefinitions[journalEntryId] = [];
+    }
+  }
+
+  Future<bool> addEntrySpecificDefinition(CustomFieldDefinition def) async {
+    try {
+      await DatabaseHelper.instance.createCustomFieldDefinition(def);
+      if (def.journalEntryId != null) {
+        await loadEntrySpecificDefinitions(def.journalEntryId!);
+      }
+      return true;
+    } catch (e) {
+      error = 'Failed to add entry-specific field: $e';
+      notifyListeners();
+      return false;
+    }
   }
 }

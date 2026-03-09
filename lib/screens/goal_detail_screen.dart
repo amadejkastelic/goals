@@ -10,6 +10,7 @@ import '../providers/journal_provider.dart';
 import '../db/database_helper.dart';
 import '../widgets/journal_day_tile.dart';
 import 'journal_entry_screen.dart';
+import 'goal_form_screen.dart';
 
 class GoalDetailScreen extends StatefulWidget {
   final int goalId;
@@ -73,16 +74,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
         actions: [
           PopupMenuButton<String>(
             onSelected: _handleMenuAction,
-            itemBuilder: (context) => [
-              const PopupMenuItem(value: 'edit', child: Text('Edit')),
-              const PopupMenuItem(
-                value: 'complete',
-                child: Text('Mark Complete'),
-              ),
-              const PopupMenuItem(value: 'pause', child: Text('Pause')),
-              const PopupMenuItem(value: 'abandon', child: Text('Abandon')),
-              const PopupMenuItem(value: 'delete', child: Text('Delete')),
-            ],
+            itemBuilder: (context) => _buildMenuItems(),
           ),
         ],
       ),
@@ -274,10 +266,42 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     );
   }
 
+  List<PopupMenuEntry<String>> _buildMenuItems() {
+    final items = <PopupMenuEntry<String>>[
+      const PopupMenuItem(value: 'edit', child: Text('Edit')),
+    ];
+
+    if (_goal!.status != 'active') {
+      items.add(const PopupMenuItem(value: 'active', child: Text('Activate')));
+    }
+    if (_goal!.status != 'completed') {
+      items.add(
+        const PopupMenuItem(value: 'complete', child: Text('Mark Complete')),
+      );
+    }
+    if (_goal!.status != 'paused') {
+      items.add(const PopupMenuItem(value: 'pause', child: Text('Pause')));
+    }
+    if (_goal!.status != 'abandoned') {
+      items.add(const PopupMenuItem(value: 'abandon', child: Text('Abandon')));
+    }
+
+    items.add(const PopupMenuDivider());
+    items.add(const PopupMenuItem(value: 'delete', child: Text('Delete')));
+
+    return items;
+  }
+
   void _handleMenuAction(String action) async {
     switch (action) {
       case 'edit':
-        Navigator.pushNamed(context, '/goal-edit', arguments: widget.goalId);
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => GoalFormScreen(goal: _goal)),
+        );
+        break;
+      case 'active':
+        await _updateStatus('active');
         break;
       case 'complete':
         await _updateStatus('completed');

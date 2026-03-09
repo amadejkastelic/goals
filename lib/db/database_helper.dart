@@ -25,7 +25,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -78,7 +78,8 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE custom_field_definitions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        goal_id INTEGER NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+        goal_id INTEGER REFERENCES goals(id) ON DELETE CASCADE,
+        journal_entry_id INTEGER REFERENCES journal_entries(id) ON DELETE CASCADE,
         name TEXT NOT NULL,
         field_type TEXT NOT NULL,
         sort_order INTEGER DEFAULT 0,
@@ -104,7 +105,8 @@ class DatabaseHelper {
       await db.execute('''
         CREATE TABLE custom_field_definitions (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          goal_id INTEGER NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+          goal_id INTEGER REFERENCES goals(id) ON DELETE CASCADE,
+          journal_entry_id INTEGER REFERENCES journal_entries(id) ON DELETE CASCADE,
           name TEXT NOT NULL,
           field_type TEXT NOT NULL,
           sort_order INTEGER DEFAULT 0,
@@ -121,6 +123,28 @@ class DatabaseHelper {
           UNIQUE(definition_id, journal_entry_id)
         )
       ''');
+    }
+
+    if (oldVersion < 3) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS custom_field_definitions_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          goal_id INTEGER REFERENCES goals(id) ON DELETE CASCADE,
+          journal_entry_id INTEGER REFERENCES journal_entries(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          field_type TEXT NOT NULL,
+          sort_order INTEGER DEFAULT 0,
+          options TEXT
+        )
+      ''');
+      await db.execute('''
+        INSERT INTO custom_field_definitions_new (id, goal_id, name, field_type, sort_order, options)
+        SELECT id, goal_id, name, field_type, sort_order, options FROM custom_field_definitions
+      ''');
+      await db.execute('DROP TABLE custom_field_definitions');
+      await db.execute(
+        'ALTER TABLE custom_field_definitions_new RENAME TO custom_field_definitions',
+      );
     }
   }
 
@@ -290,6 +314,19 @@ class DatabaseHelper {
     return result.map((json) => CustomFieldDefinition.fromMap(json)).toList();
   }
 
+  Future<List<CustomFieldDefinition>> readEntrySpecificDefinitions(
+    int journalEntryId,
+  ) async {
+    final db = await instance.database;
+    final result = await db.query(
+      'custom_field_definitions',
+      where: 'journal_entry_id = ?',
+      whereArgs: [journalEntryId],
+      orderBy: 'sort_order ASC',
+    );
+    return result.map((json) => CustomFieldDefinition.fromMap(json)).toList();
+  }
+
   Future<int> updateCustomFieldDefinition(CustomFieldDefinition def) async {
     final db = await instance.database;
     return db.update(
@@ -315,6 +352,15 @@ class DatabaseHelper {
       'custom_field_definitions',
       where: 'goal_id = ?',
       whereArgs: [goalId],
+    );
+  }
+
+  Future<int> deleteEntrySpecificDefinitionsForEntry(int journalEntryId) async {
+    final db = await instance.database;
+    return await db.delete(
+      'custom_field_definitions',
+      where: 'journal_entry_id = ?',
+      whereArgs: [journalEntryId],
     );
   }
 

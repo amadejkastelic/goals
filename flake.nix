@@ -59,14 +59,45 @@
         };
         androidSdk = androidComposition.androidsdk;
 
-        pre-commit-check = pre-commit-hooks.lib.${system}.run {
+        flutterDeps =
+          (import ./nix/deps {
+            inherit (pkgs)
+              runCommand
+              yq
+              jq
+              pub2nix
+              dart
+              flutter
+              python3
+              ;
+          })
+            {
+              pubspecLockFile = ./pubspec.lock;
+              src = ./.;
+            };
+
+        pre-commit = import ./nix/pre-commit.nix {
+          inherit pkgs;
+          inherit pre-commit-hooks system flutterDeps;
           src = ./.;
-          hooks = {
-            nixfmt-rfc-style.enable = true;
-            dart-analyze.enable = true;
-            dart-format.enable = true;
-          };
         };
+
+        goalsPackage =
+          if pkgs.lib.hasPrefix "x86_64-linux" system || pkgs.lib.hasPrefix "aarch64-linux" system then
+            pkgs.callPackage ./nix/packages {
+              flutter = pkgs.flutter;
+              inherit (pkgs)
+                makeDesktopItem
+                copyDesktopItems
+                pkg-config
+                gtk3
+                glib
+                pcre
+                sqlite
+                ;
+            }
+          else
+            null;
       in
       {
         devShells.default = pkgs.callPackage ./nix/shell.nix {
@@ -74,8 +105,24 @@
             pkgs
             androidSdk
             buildToolsVersion
-            pre-commit-check
             ;
+          pre-commit-check = pre-commit.check;
+        };
+
+        packages = pkgs.lib.optionalAttrs (goalsPackage != null) {
+          default = goalsPackage;
+          goals = goalsPackage;
+        };
+
+        apps = pkgs.lib.optionalAttrs (goalsPackage != null) {
+          default = {
+            type = "app";
+            program = "${goalsPackage}/bin/goals";
+          };
+        };
+
+        checks = {
+          pre-commit-check = pre-commit.check;
         };
       }
     );

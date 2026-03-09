@@ -13,7 +13,8 @@ enum CustomFieldType {
 
 class CustomFieldDefinition {
   final int? id;
-  final int goalId;
+  final int? goalId;
+  final int? journalEntryId;
   final String name;
   final CustomFieldType fieldType;
   final int sortOrder;
@@ -21,17 +22,22 @@ class CustomFieldDefinition {
 
   CustomFieldDefinition({
     this.id,
-    required this.goalId,
+    this.goalId,
+    this.journalEntryId,
     required this.name,
     required this.fieldType,
     this.sortOrder = 0,
     this.options = const [],
-  });
+  }) : assert(
+         goalId != null || journalEntryId != null,
+         'Either goalId or journalEntryId must be provided',
+       );
 
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'goal_id': goalId,
+      'journal_entry_id': journalEntryId,
       'name': name,
       'field_type': fieldType.name,
       'sort_order': sortOrder,
@@ -50,7 +56,8 @@ class CustomFieldDefinition {
 
     return CustomFieldDefinition(
       id: map['id'] as int?,
-      goalId: map['goal_id'] as int,
+      goalId: map['goal_id'] as int?,
+      journalEntryId: map['journal_entry_id'] as int?,
       name: map['name'] as String,
       fieldType: CustomFieldType.values.firstWhere(
         (e) => e.name == map['field_type'],
@@ -64,6 +71,7 @@ class CustomFieldDefinition {
   CustomFieldDefinition copyWith({
     int? id,
     int? goalId,
+    int? journalEntryId,
     String? name,
     CustomFieldType? fieldType,
     int? sortOrder,
@@ -72,6 +80,7 @@ class CustomFieldDefinition {
     return CustomFieldDefinition(
       id: id ?? this.id,
       goalId: goalId ?? this.goalId,
+      journalEntryId: journalEntryId ?? this.journalEntryId,
       name: name ?? this.name,
       fieldType: fieldType ?? this.fieldType,
       sortOrder: sortOrder ?? this.sortOrder,
