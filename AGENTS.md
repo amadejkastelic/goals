@@ -23,6 +23,7 @@ lib/
   providers/
     goals_provider.dart  # Goals state management
     categories_provider.dart # Categories state management
+    journal_provider.dart # Journal entries state management
   screens/
     home_screen.dart     # Goals list, filtering
     goal_detail_screen.dart # Goal progress, day tiles
