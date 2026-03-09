@@ -37,6 +37,8 @@
           };
         };
 
+        version = "1.0.0";
+
         buildToolsVersion = "35.0.0";
         androidComposition = pkgs.androidenv.composeAndroidPackages {
           buildToolsVersions = [
@@ -82,22 +84,32 @@
           src = ./.;
         };
 
-        goalsPackage =
-          if pkgs.lib.hasPrefix "x86_64-linux" system || pkgs.lib.hasPrefix "aarch64-linux" system then
-            pkgs.callPackage ./nix/packages {
-              flutter = pkgs.flutter;
-              inherit (pkgs)
-                makeDesktopItem
-                copyDesktopItems
-                pkg-config
-                gtk3
-                glib
-                pcre
-                sqlite
-                ;
-            }
-          else
-            null;
+        gradleDeps = import ./nix/gradle/deps.nix {
+          inherit (pkgs) lib fetchurl runCommand;
+        };
+
+        goalsPackage = pkgs.callPackage ./nix/packages/linux.nix {
+          flutter = pkgs.flutter;
+          inherit (pkgs)
+            makeDesktopItem
+            copyDesktopItems
+            pkg-config
+            gtk3
+            glib
+            pcre
+            sqlite
+            ;
+          inherit version;
+        };
+
+        goalsAndroidPackage = pkgs.callPackage ./nix/packages/android.nix {
+          flutter = pkgs.flutter;
+          jdk17 = pkgs.jdk17;
+          inherit androidSdk gradleDeps version;
+          cmake = pkgs.cmake;
+          ninja = pkgs.ninja;
+        };
+
       in
       {
         devShells.default = pkgs.callPackage ./nix/shell.nix {
@@ -109,7 +121,8 @@
           pre-commit-check = pre-commit.check;
         };
 
-        packages = pkgs.lib.optionalAttrs (goalsPackage != null) {
+        packages = {
+          android = goalsAndroidPackage;
           default = goalsPackage;
           goals = goalsPackage;
         };

@@ -8,14 +8,12 @@
   glib,
   pcre,
   sqlite,
+  version,
 }:
 
-let
-  pname = "goals";
-  version = "1.0.0";
-in
 flutter.buildFlutterApplication {
-  inherit pname version;
+  pname = "goals";
+  inherit version;
 
   src = ../..;
 
