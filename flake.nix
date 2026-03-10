@@ -84,10 +84,6 @@
           src = ./.;
         };
 
-        gradleDeps = import ./nix/gradle/deps.nix {
-          inherit (pkgs) lib fetchurl runCommand;
-        };
-
         goalsPackage = pkgs.callPackage ./nix/packages/linux.nix {
           flutter = pkgs.flutter;
           inherit (pkgs)
@@ -101,15 +97,6 @@
             ;
           inherit version;
         };
-
-        goalsAndroidPackage = pkgs.callPackage ./nix/packages/android.nix {
-          flutter = pkgs.flutter;
-          jdk17 = pkgs.jdk17;
-          inherit androidSdk gradleDeps version;
-          cmake = pkgs.cmake;
-          ninja = pkgs.ninja;
-        };
-
       in
       {
         devShells.default = pkgs.callPackage ./nix/shell.nix {
@@ -122,7 +109,6 @@
         };
 
         packages = {
-          android = goalsAndroidPackage;
           default = goalsPackage;
           goals = goalsPackage;
         };
