@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../models/mfp_nutrition.dart';
 
@@ -13,15 +14,27 @@ class MFPDataFetcher extends StatefulWidget {
 }
 
 class _MFPDataFetcherState extends State<MFPDataFetcher> {
+  static const _loggedInKey = 'mfp_logged_in';
+
   late final WebViewController _controller;
   bool _isLoading = true;
   String? _status;
   MFPNutrition? _extractedData;
+  bool _isLoggedIn = false;
+  bool _showWebView = true;
 
   @override
   void initState() {
     super.initState();
     _status = 'Loading MyFitnessPal...';
+    _checkLoginStatus();
+  }
+
+  Future<void> _checkLoginStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    _isLoggedIn = prefs.getBool(_loggedInKey) ?? false;
+
+    setState(() => _showWebView = !_isLoggedIn);
 
     final dateStr =
         '${widget.date.year}-${widget.date.month.toString().padLeft(2, '0')}-${widget.date.day.toString().padLeft(2, '0')}';
@@ -49,7 +62,10 @@ class _MFPDataFetcherState extends State<MFPDataFetcher> {
 
   Future<void> _handlePageLoad(String url) async {
     if (url.contains('/account/login')) {
-      setState(() => _status = 'Please log in to MyFitnessPal');
+      setState(() {
+        _status = 'Please log in to MyFitnessPal';
+        _showWebView = true;
+      });
       return;
     }
 
@@ -57,6 +73,12 @@ class _MFPDataFetcherState extends State<MFPDataFetcher> {
       await Future.delayed(const Duration(milliseconds: 500));
       await _tryExtractData();
     }
+  }
+
+  Future<void> _markLoggedIn() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_loggedInKey, true);
+    _isLoggedIn = true;
   }
 
   Future<void> _tryExtractData() async {
@@ -162,6 +184,11 @@ class _MFPDataFetcherState extends State<MFPDataFetcher> {
             ? 'Found: ${nutrition.calories} cal, ${nutrition.protein.toStringAsFixed(0)}g protein'
             : 'No data found. Tap "Retry" or check if you have entries for this date.';
       });
+
+      if (nutrition.calories > 0) {
+        await _markLoggedIn();
+        setState(() => _showWebView = false);
+      }
     } catch (e) {
       debugPrint('MFP extraction error: $e');
       setState(() => _status = 'Error extracting data: $e');
@@ -188,56 +215,117 @@ class _MFPDataFetcherState extends State<MFPDataFetcher> {
             TextButton(onPressed: _confirmImport, child: const Text('Import')),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(child: WebViewWidget(controller: _controller)),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    if (_isLoading)
-                      const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    else if (_extractedData != null &&
-                        _extractedData!.calories > 0)
-                      const Icon(
-                        Icons.check_circle,
-                        color: Colors.green,
-                        size: 20,
+          Visibility(
+            visible: _showWebView,
+            maintainState: true,
+            child: WebViewWidget(controller: _controller),
+          ),
+          if (!_showWebView)
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (_isLoading)
+                    const CircularProgressIndicator()
+                  else ...[
+                    const Icon(
+                      Icons.check_circle,
+                      color: Colors.green,
+                      size: 48,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      _status ?? 'Data loaded',
+                      style: Theme.of(context).textTheme.titleMedium,
+                      textAlign: TextAlign.center,
+                    ),
+                    if (_extractedData != null &&
+                        _extractedData!.calories > 0) ...[
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 16,
+                        children: [
+                          Text('🔥 ${_extractedData!.calories} cal'),
+                          Text(
+                            '🥩 ${_extractedData!.protein.toStringAsFixed(0)}g',
+                          ),
+                          Text(
+                            '🍞 ${_extractedData!.carbs.toStringAsFixed(0)}g',
+                          ),
+                          Text('🧈 ${_extractedData!.fat.toStringAsFixed(0)}g'),
+                        ],
                       ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _status ?? '',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
+                    ],
+                    const SizedBox(height: 24),
+                    ElevatedButton.icon(
+                      onPressed: () => setState(() => _showWebView = true),
+                      icon: const Icon(Icons.login),
+                      label: const Text('Re-login'),
                     ),
                   ],
-                ),
-                if (_extractedData != null && _extractedData!.calories > 0) ...[
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 16,
-                    children: [
-                      Text('🔥 ${_extractedData!.calories} cal'),
-                      Text('🥩 ${_extractedData!.protein.toStringAsFixed(0)}g'),
-                      Text('🍞 ${_extractedData!.carbs.toStringAsFixed(0)}g'),
-                      Text('🧈 ${_extractedData!.fat.toStringAsFixed(0)}g'),
-                    ],
-                  ),
                 ],
-              ],
+              ),
             ),
-          ),
+          if (_showWebView)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        if (_isLoading)
+                          const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        else if (_extractedData != null &&
+                            _extractedData!.calories > 0)
+                          const Icon(
+                            Icons.check_circle,
+                            color: Colors.green,
+                            size: 20,
+                          ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _status ?? '',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_extractedData != null &&
+                        _extractedData!.calories > 0) ...[
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 16,
+                        children: [
+                          Text('🔥 ${_extractedData!.calories} cal'),
+                          Text(
+                            '🥩 ${_extractedData!.protein.toStringAsFixed(0)}g',
+                          ),
+                          Text(
+                            '🍞 ${_extractedData!.carbs.toStringAsFixed(0)}g',
+                          ),
+                          Text('🧈 ${_extractedData!.fat.toStringAsFixed(0)}g'),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
