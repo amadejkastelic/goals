@@ -25,7 +25,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -61,6 +61,13 @@ class DatabaseHelper {
         date TEXT NOT NULL,
         content TEXT,
         mood_emoji TEXT,
+        mfp_calories INTEGER,
+        mfp_protein REAL,
+        mfp_carbs REAL,
+        mfp_fat REAL,
+        mfp_fiber REAL,
+        mfp_sodium REAL,
+        mfp_sugar REAL,
         UNIQUE(goal_id, day_number)
       )
     ''');
@@ -145,6 +152,22 @@ class DatabaseHelper {
       await db.execute(
         'ALTER TABLE custom_field_definitions_new RENAME TO custom_field_definitions',
       );
+    }
+
+    if (oldVersion < 4) {
+      await db.execute(
+        'ALTER TABLE journal_entries ADD COLUMN mfp_calories INTEGER',
+      );
+      await db.execute(
+        'ALTER TABLE journal_entries ADD COLUMN mfp_protein REAL',
+      );
+      await db.execute('ALTER TABLE journal_entries ADD COLUMN mfp_carbs REAL');
+      await db.execute('ALTER TABLE journal_entries ADD COLUMN mfp_fat REAL');
+      await db.execute('ALTER TABLE journal_entries ADD COLUMN mfp_fiber REAL');
+      await db.execute(
+        'ALTER TABLE journal_entries ADD COLUMN mfp_sodium REAL',
+      );
+      await db.execute('ALTER TABLE journal_entries ADD COLUMN mfp_sugar REAL');
     }
   }
 
@@ -258,11 +281,33 @@ class DatabaseHelper {
 
   Future<int> updateJournalEntry(JournalEntry entry) async {
     final db = await instance.database;
+    final map = entry.toMap();
+    print(
+      'updateJournalEntry: mfp_calories=${map['mfp_calories']}, mfp_protein=${map['mfp_protein']}',
+    );
     return db.update(
       'journal_entries',
-      entry.toMap(),
+      map,
       where: 'id = ?',
       whereArgs: [entry.id],
+    );
+  }
+
+  Future<int> clearMFPNutrition(int entryId) async {
+    final db = await instance.database;
+    return await db.update(
+      'journal_entries',
+      {
+        'mfp_calories': null,
+        'mfp_protein': null,
+        'mfp_carbs': null,
+        'mfp_fat': null,
+        'mfp_fiber': null,
+        'mfp_sodium': null,
+        'mfp_sugar': null,
+      },
+      where: 'id = ?',
+      whereArgs: [entryId],
     );
   }
 

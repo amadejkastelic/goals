@@ -59,6 +59,9 @@ class JournalProvider with ChangeNotifier {
 
   Future<JournalEntry?> saveEntry(JournalEntry entry) async {
     try {
+      debugPrint(
+        'saveEntry: id=${entry.id}, mfpNutrition=${entry.mfpNutrition?.calories}',
+      );
       JournalEntry savedEntry;
       if (entry.id != null) {
         await DatabaseHelper.instance.updateJournalEntry(entry);
@@ -72,12 +75,38 @@ class JournalProvider with ChangeNotifier {
           date: entry.date,
           content: entry.content,
           moodEmoji: entry.moodEmoji,
+          mfpNutrition: entry.mfpNutrition,
         );
       }
       await loadEntriesForGoal(entry.goalId);
       return savedEntry;
     } catch (e) {
       _errorByGoal[entry.goalId] = 'Failed to save entry: $e';
+      notifyListeners();
+      return null;
+    }
+  }
+
+  Future<JournalEntry?> saveEntryWithClearedNutrition(
+    JournalEntry entry,
+  ) async {
+    try {
+      if (entry.id != null) {
+        await DatabaseHelper.instance.clearMFPNutrition(entry.id!);
+      }
+      await loadEntriesForGoal(entry.goalId);
+
+      return JournalEntry(
+        id: entry.id,
+        goalId: entry.goalId,
+        dayNumber: entry.dayNumber,
+        date: entry.date,
+        content: entry.content,
+        moodEmoji: entry.moodEmoji,
+        mfpNutrition: null,
+      );
+    } catch (e) {
+      _errorByGoal[entry.goalId] = 'Failed to clear nutrition: $e';
       notifyListeners();
       return null;
     }

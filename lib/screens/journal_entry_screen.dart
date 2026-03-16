@@ -12,6 +12,9 @@ import '../providers/journal_provider.dart';
 import '../providers/custom_fields_provider.dart';
 import '../widgets/media_gallery.dart';
 import '../widgets/custom_field_input.dart';
+import '../models/mfp_nutrition.dart';
+import '../widgets/mfp_nutrition_tile.dart';
+import 'mfp_data_fetcher.dart';
 
 class JournalEntryScreen extends StatefulWidget {
   final int goalId;
@@ -198,6 +201,14 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
               );
             },
           ),
+          if (_savedEntry?.mfpNutrition != null) ...[
+            const SizedBox(height: 16),
+            MFPNutritionTile(
+              nutrition: _savedEntry!.mfpNutrition!,
+              onRefresh: () => _importMFPNutrition(),
+              onRemove: () => _removeMFPNutrition(),
+            ),
+          ],
           if (_savedEntry?.id != null)
             Consumer<JournalProvider>(
               builder: (context, provider, _) {
@@ -252,6 +263,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
               ),
             ),
             const SizedBox(height: 24),
+            _buildMFPSection(),
             Consumer<CustomFieldsProvider>(
               builder: (context, provider, _) {
                 final goalDefinitions = provider.getDefinitionsForGoal(
@@ -541,6 +553,107 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
     );
   }
 
+  Widget _buildMFPSection() {
+    if (_savedEntry?.mfpNutrition != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          MFPNutritionTile(
+            nutrition: _savedEntry!.mfpNutrition!,
+            onRefresh: () => _importMFPNutrition(),
+            onRemove: () => _removeMFPNutrition(),
+          ),
+        ],
+      );
+    }
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: ListTile(
+        leading: const Icon(Icons.restaurant),
+        title: const Text('MyFitnessPal'),
+        subtitle: const Text('Import nutrition data for this day'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => _importMFPNutrition(),
+      ),
+    );
+  }
+
+  Future<void> _importMFPNutrition() async {
+    if (_savedEntry?.id == null) {
+      await _saveEntry();
+      if (_savedEntry?.id == null) return;
+    }
+
+    final nutrition = await Navigator.of(context).push<MFPNutrition>(
+      MaterialPageRoute(
+        builder: (context) => MFPDataFetcher(date: widget.date),
+      ),
+    );
+
+    if (nutrition != null && mounted) {
+      debugPrint(
+        'MFP import: got nutrition ${nutrition.calories} cal, ${nutrition.protein}g protein',
+      );
+      final updatedEntry = _savedEntry!.copyWith(mfpNutrition: nutrition);
+      debugPrint(
+        'MFP import: entry to save has nutrition: ${updatedEntry.mfpNutrition?.calories}',
+      );
+      final saved = await context.read<JournalProvider>().saveEntry(
+        updatedEntry,
+      );
+      debugPrint(
+        'MFP import: saved entry has nutrition: ${saved?.mfpNutrition?.calories}',
+      );
+      setState(() => _savedEntry = saved);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Nutrition data imported')),
+        );
+      }
+    }
+  }
+
+  Future<void> _removeMFPNutrition() async {
+    if (_savedEntry?.id == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove nutrition data'),
+        content: const Text(
+          'Remove the imported nutrition data from this entry?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final updatedEntry = _savedEntry!.copyWith(
+      mfpNutrition: const MFPNutrition(
+        calories: 0,
+        protein: 0,
+        carbs: 0,
+        fat: 0,
+      ),
+    );
+    final saved = await context
+        .read<JournalProvider>()
+        .saveEntryWithClearedNutrition(updatedEntry);
+    setState(() => _savedEntry = saved);
+  }
+
   Future<void> _saveEntry() async {
     if (_isSaving) return;
     setState(() => _isSaving = true);
@@ -555,6 +668,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
             ? null
             : _contentController.text,
         moodEmoji: _selectedMood,
+        mfpNutrition: _savedEntry?.mfpNutrition,
       );
 
       final saved = await context.read<JournalProvider>().saveEntry(entry);

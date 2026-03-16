@@ -36,7 +36,8 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     final goal = await DatabaseHelper.instance.readGoal(widget.goalId);
     Category? category;
     if (goal.categoryId != null) {
-      final categories = await DatabaseHelper.instance.readAllCategories();
+      final List<Category> categories = await DatabaseHelper.instance
+          .readAllCategories();
       try {
         category = categories.firstWhere((c) => c.id == goal.categoryId);
       } catch (_) {}
