@@ -201,12 +201,51 @@ class _MFPDataFetcherState extends State<MFPDataFetcher> {
     }
   }
 
+  Future<void> _clearSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_loggedInKey);
+    _isLoggedIn = false;
+    _extractedData = null;
+
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: (url) {
+            setState(() {
+              _isLoading = true;
+              _status = 'Loading...';
+            });
+          },
+          onPageFinished: (url) {
+            setState(() => _isLoading = false);
+            _handlePageLoad(url);
+          },
+        ),
+      )
+      ..loadRequest(Uri.parse('https://www.myfitnesspal.com/account/logout'));
+
+    setState(() {
+      _showWebView = true;
+      _status = 'Logged out. Reloading...';
+    });
+
+    await Future.delayed(const Duration(seconds: 1));
+
+    final dateStr =
+        '${widget.date.year}-${widget.date.month.toString().padLeft(2, '0')}-${widget.date.day.toString().padLeft(2, '0')}';
+    _controller.loadRequest(
+      Uri.parse('https://www.myfitnesspal.com/food/diary?date=$dateStr'),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('MyFitnessPal'),
         actions: [
+          TextButton(onPressed: _clearSession, child: const Text('Logout')),
           TextButton(
             onPressed: _isLoading ? null : _tryExtractData,
             child: const Text('Retry'),
@@ -260,7 +299,7 @@ class _MFPDataFetcherState extends State<MFPDataFetcher> {
                     ],
                     const SizedBox(height: 24),
                     ElevatedButton.icon(
-                      onPressed: () => setState(() => _showWebView = true),
+                      onPressed: _clearSession,
                       icon: const Icon(Icons.login),
                       label: const Text('Re-login'),
                     ),

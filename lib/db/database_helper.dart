@@ -68,6 +68,10 @@ class DatabaseHelper {
         mfp_fiber REAL,
         mfp_sodium REAL,
         mfp_sugar REAL,
+        health_steps INTEGER,
+        health_active_calories REAL,
+        health_heart_rate REAL,
+        health_sleep_minutes INTEGER,
         UNIQUE(goal_id, day_number)
       )
     ''');
