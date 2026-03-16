@@ -1,5 +1,13 @@
+import 'package:flutter/foundation.dart';
 import 'package:health/health.dart';
 import '../models/health_data.dart';
+
+enum HealthConnectStatus {
+  available,
+  notInstalled,
+  needsUpdate,
+  permissionDenied,
+}
 
 class HealthService {
   static final HealthService _instance = HealthService._internal();
@@ -8,6 +16,9 @@ class HealthService {
 
   final Health _health = Health();
   bool _configured = false;
+  String? _lastError;
+
+  String? get lastError => _lastError;
 
   static const List<HealthDataType> _dataTypes = [
     HealthDataType.STEPS,
@@ -23,35 +34,66 @@ class HealthService {
       _configured = true;
       return true;
     } catch (e) {
+      _lastError = 'Failed to configure health: $e';
       return false;
+    }
+  }
+
+  Future<HealthConnectStatus> getHealthConnectStatus() async {
+    if (!await _ensureConfigured()) return HealthConnectStatus.notInstalled;
+
+    try {
+      final status = await _health.getHealthConnectSdkStatus();
+      debugPrint('Health Connect SDK status: $status');
+      switch (status) {
+        case HealthConnectSdkStatus.sdkAvailable:
+          return HealthConnectStatus.available;
+        case HealthConnectSdkStatus.sdkUnavailableProviderUpdateRequired:
+          return HealthConnectStatus.needsUpdate;
+        default:
+          return HealthConnectStatus.notInstalled;
+      }
+    } catch (e) {
+      _lastError = 'Failed to get HC status: $e';
+      return HealthConnectStatus.notInstalled;
     }
   }
 
   Future<bool> isHealthConnectAvailable() async {
-    if (!await _ensureConfigured()) return false;
-
-    try {
-      final status = await _health.getHealthConnectSdkStatus();
-      return status == HealthConnectSdkStatus.sdkAvailable;
-    } catch (e) {
-      return false;
-    }
+    final status = await getHealthConnectStatus();
+    return status == HealthConnectStatus.available;
   }
 
-  Future<bool> requestPermissions() async {
-    if (!await _ensureConfigured()) return false;
+  Future<HealthConnectStatus> requestPermissions() async {
+    if (!await _ensureConfigured()) {
+      return HealthConnectStatus.notInstalled;
+    }
 
     try {
-      final available = await isHealthConnectAvailable();
-      if (!available) {
+      final status = await getHealthConnectStatus();
+      debugPrint('HC status before request: $status');
+
+      if (status == HealthConnectStatus.notInstalled ||
+          status == HealthConnectStatus.needsUpdate) {
+        debugPrint('Installing Health Connect...');
         await _health.installHealthConnect();
-        return false;
+        return status;
       }
 
+      debugPrint('Requesting authorization for: $_dataTypes');
       final granted = await _health.requestAuthorization(_dataTypes);
-      return granted;
+      debugPrint('Authorization result: $granted');
+
+      if (!granted) {
+        _lastError = 'Permission denied by user';
+        return HealthConnectStatus.permissionDenied;
+      }
+
+      return HealthConnectStatus.available;
     } catch (e) {
-      return false;
+      _lastError = 'Permission request failed: $e';
+      debugPrint('Permission error: $e');
+      return HealthConnectStatus.permissionDenied;
     }
   }
 
@@ -63,8 +105,11 @@ class HealthService {
       if (!available) return false;
 
       final hasAccess = await _health.hasPermissions(_dataTypes);
+      debugPrint('Has permissions: $hasAccess');
       return hasAccess == true;
     } catch (e) {
+      _lastError = 'Permission check failed: $e';
+      debugPrint('Permission check error: $e');
       return false;
     }
   }
@@ -74,12 +119,17 @@ class HealthService {
 
     try {
       final available = await isHealthConnectAvailable();
-      if (!available) return null;
+      if (!available) {
+        _lastError = 'Health Connect not available';
+        return null;
+      }
 
       final hasAuth = await hasPermissions();
       if (!hasAuth) {
-        final requested = await requestPermissions();
-        if (!requested) return null;
+        final result = await requestPermissions();
+        if (result != HealthConnectStatus.available) {
+          return null;
+        }
       }
 
       final startOfDay = DateTime(date.year, date.month, date.day);
@@ -97,7 +147,10 @@ class HealthService {
           endTime: endOfDay,
         );
         steps = _aggregateNumericValue(stepsData);
-      } catch (_) {}
+        debugPrint('Steps: $steps');
+      } catch (e) {
+        debugPrint('Failed to fetch steps: $e');
+      }
 
       try {
         final caloriesData = await _health.getHealthDataFromTypes(
@@ -106,7 +159,10 @@ class HealthService {
           endTime: endOfDay,
         );
         activeCalories = _aggregateNumericValue(caloriesData)?.toDouble();
-      } catch (_) {}
+        debugPrint('Calories: $activeCalories');
+      } catch (e) {
+        debugPrint('Failed to fetch calories: $e');
+      }
 
       try {
         final heartData = await _health.getHealthDataFromTypes(
@@ -115,7 +171,10 @@ class HealthService {
           endTime: endOfDay,
         );
         heartRate = _averageNumericValue(heartData);
-      } catch (_) {}
+        debugPrint('Heart rate: $heartRate');
+      } catch (e) {
+        debugPrint('Failed to fetch heart rate: $e');
+      }
 
       try {
         final sleepData = await _health.getHealthDataFromTypes(
@@ -124,12 +183,16 @@ class HealthService {
           endTime: endOfDay.add(const Duration(hours: 12)),
         );
         sleepMinutes = _aggregateSleepForDate(sleepData, date);
-      } catch (_) {}
+        debugPrint('Sleep minutes: $sleepMinutes');
+      } catch (e) {
+        debugPrint('Failed to fetch sleep: $e');
+      }
 
       if (steps == null &&
           activeCalories == null &&
           heartRate == null &&
           sleepMinutes == null) {
+        _lastError = 'No health data found for this date';
         return null;
       }
 
@@ -140,6 +203,8 @@ class HealthService {
         sleepMinutes: sleepMinutes,
       );
     } catch (e) {
+      _lastError = 'Failed to fetch health data: $e';
+      debugPrint('Fetch error: $e');
       return null;
     }
   }
@@ -192,6 +257,6 @@ class HealthService {
       }
     }
 
-    return totalMinutes.toInt();
+    return totalMinutes > 0 ? totalMinutes.toInt() : null;
   }
 }

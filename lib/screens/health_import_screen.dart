@@ -49,8 +49,8 @@ class _HealthImportScreenState extends State<HealthImportScreen> {
       _hasPermissions = await _healthService.hasPermissions();
 
       if (!_hasPermissions) {
-        final granted = await _healthService.requestPermissions();
-        _hasPermissions = granted;
+        final result = await _healthService.requestPermissions();
+        _hasPermissions = result == HealthConnectStatus.available;
       }
 
       if (_hasPermissions) {
@@ -183,9 +183,10 @@ class _HealthImportScreenState extends State<HealthImportScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Health Connect is required to import health data. '
-              'Please install Health Connect from the Play Store and ensure '
-              'Samsung Health sync is enabled in Settings.',
+              'Health Connect is required to import health data.\n\n'
+              '1. Install Health Connect from Play Store\n'
+              '2. Open Samsung Health > Settings > Health Connect\n'
+              '3. Enable data sync',
               style: theme.textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),
@@ -220,16 +221,26 @@ class _HealthImportScreenState extends State<HealthImportScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Grant access to read health data from Health Connect.',
+              'To import health data, you need to grant permission in Health Connect.\n\n'
+              'Tap the button below, then allow access to:\n'
+              '• Steps\n'
+              '• Active Calories\n'
+              '• Heart Rate\n'
+              '• Sleep',
               style: theme.textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: () async {
-                final granted = await _healthService.requestPermissions();
-                if (granted) {
+                final result = await _healthService.requestPermissions();
+                if (result == HealthConnectStatus.available) {
                   _checkAndFetchData();
+                } else if (mounted) {
+                  final error = _healthService.lastError ?? 'Permission denied';
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text(error)));
                 }
               },
               icon: const Icon(Icons.key),
@@ -257,8 +268,8 @@ class _HealthImportScreenState extends State<HealthImportScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'No health data available for ${_formatDate(widget.date)}. '
-              'Make sure Samsung Health is syncing to Health Connect.',
+              'No health data available for ${_formatDate(widget.date)}.\n\n'
+              'Make sure Samsung Health is syncing data to Health Connect.',
               style: theme.textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),
