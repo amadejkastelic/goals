@@ -76,6 +76,7 @@ class JournalProvider with ChangeNotifier {
           content: entry.content,
           moodEmoji: entry.moodEmoji,
           mfpNutrition: entry.mfpNutrition,
+          healthData: entry.healthData,
         );
       }
       await loadEntriesForGoal(entry.goalId);
@@ -104,9 +105,36 @@ class JournalProvider with ChangeNotifier {
         content: entry.content,
         moodEmoji: entry.moodEmoji,
         mfpNutrition: null,
+        healthData: entry.healthData,
       );
     } catch (e) {
       _errorByGoal[entry.goalId] = 'Failed to clear nutrition: $e';
+      notifyListeners();
+      return null;
+    }
+  }
+
+  Future<JournalEntry?> saveEntryWithClearedHealthData(
+    JournalEntry entry,
+  ) async {
+    try {
+      if (entry.id != null) {
+        await DatabaseHelper.instance.clearHealthData(entry.id!);
+      }
+      await loadEntriesForGoal(entry.goalId);
+
+      return JournalEntry(
+        id: entry.id,
+        goalId: entry.goalId,
+        dayNumber: entry.dayNumber,
+        date: entry.date,
+        content: entry.content,
+        moodEmoji: entry.moodEmoji,
+        mfpNutrition: entry.mfpNutrition,
+        healthData: null,
+      );
+    } catch (e) {
+      _errorByGoal[entry.goalId] = 'Failed to clear health data: $e';
       notifyListeners();
       return null;
     }

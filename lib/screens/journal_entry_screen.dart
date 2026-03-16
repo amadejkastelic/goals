@@ -13,8 +13,11 @@ import '../providers/custom_fields_provider.dart';
 import '../widgets/media_gallery.dart';
 import '../widgets/custom_field_input.dart';
 import '../models/mfp_nutrition.dart';
+import '../models/health_data.dart';
 import '../widgets/mfp_nutrition_tile.dart';
+import '../widgets/health_data_tile.dart';
 import 'mfp_data_fetcher.dart';
+import 'health_import_screen.dart';
 
 class JournalEntryScreen extends StatefulWidget {
   final int goalId;
@@ -209,6 +212,15 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
               onRemove: () => _removeMFPNutrition(),
             ),
           ],
+          if (_savedEntry?.healthData != null &&
+              _savedEntry!.healthData!.hasData) ...[
+            const SizedBox(height: 16),
+            HealthDataTile(
+              healthData: _savedEntry!.healthData!,
+              onRefresh: () => _importHealthData(),
+              onRemove: () => _removeHealthData(),
+            ),
+          ],
           if (_savedEntry?.id != null)
             Consumer<JournalProvider>(
               builder: (context, provider, _) {
@@ -264,6 +276,8 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
             ),
             const SizedBox(height: 24),
             _buildMFPSection(),
+            const SizedBox(height: 12),
+            _buildHealthSection(),
             Consumer<CustomFieldsProvider>(
               builder: (context, provider, _) {
                 final goalDefinitions = provider.getDefinitionsForGoal(
@@ -654,6 +668,88 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
     setState(() => _savedEntry = saved);
   }
 
+  Widget _buildHealthSection() {
+    if (_savedEntry?.healthData != null && _savedEntry!.healthData!.hasData) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          HealthDataTile(
+            healthData: _savedEntry!.healthData!,
+            onRefresh: () => _importHealthData(),
+            onRemove: () => _removeHealthData(),
+          ),
+        ],
+      );
+    }
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: ListTile(
+        leading: const Icon(Icons.favorite),
+        title: const Text('Health Data'),
+        subtitle: const Text('Import steps, calories, heart rate, sleep'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => _importHealthData(),
+      ),
+    );
+  }
+
+  Future<void> _importHealthData() async {
+    if (_savedEntry?.id == null) {
+      await _saveEntry();
+      if (_savedEntry?.id == null) return;
+    }
+
+    final healthData = await Navigator.of(context).push<HealthData>(
+      MaterialPageRoute(
+        builder: (context) => HealthImportScreen(date: widget.date),
+      ),
+    );
+
+    if (healthData != null && mounted) {
+      final updatedEntry = _savedEntry!.copyWith(healthData: healthData);
+      final saved = await context.read<JournalProvider>().saveEntry(
+        updatedEntry,
+      );
+      setState(() => _savedEntry = saved);
+
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Health data imported')));
+      }
+    }
+  }
+
+  Future<void> _removeHealthData() async {
+    if (_savedEntry?.id == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove health data'),
+        content: const Text('Remove the imported health data from this entry?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final saved = await context
+        .read<JournalProvider>()
+        .saveEntryWithClearedHealthData(_savedEntry!);
+    setState(() => _savedEntry = saved);
+  }
+
   Future<void> _saveEntry() async {
     if (_isSaving) return;
     setState(() => _isSaving = true);
@@ -669,6 +765,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
             : _contentController.text,
         moodEmoji: _selectedMood,
         mfpNutrition: _savedEntry?.mfpNutrition,
+        healthData: _savedEntry?.healthData,
       );
 
       final saved = await context.read<JournalProvider>().saveEntry(entry);

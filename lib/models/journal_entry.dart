@@ -1,4 +1,5 @@
 import 'mfp_nutrition.dart';
+import 'health_data.dart';
 
 class JournalEntry {
   final int? id;
@@ -8,6 +9,7 @@ class JournalEntry {
   final String? content;
   final String? moodEmoji;
   final MFPNutrition? mfpNutrition;
+  final HealthData? healthData;
 
   JournalEntry({
     this.id,
@@ -17,6 +19,7 @@ class JournalEntry {
     this.content,
     this.moodEmoji,
     this.mfpNutrition,
+    this.healthData,
   });
 
   Map<String, dynamic> toMap() {
@@ -34,6 +37,10 @@ class JournalEntry {
       'mfp_fiber': mfpNutrition?.fiber,
       'mfp_sodium': mfpNutrition?.sodium,
       'mfp_sugar': mfpNutrition?.sugar,
+      'health_steps': healthData?.steps,
+      'health_active_calories': healthData?.activeCalories,
+      'health_heart_rate': healthData?.heartRate,
+      'health_sleep_minutes': healthData?.sleepMinutes,
     };
   }
 
@@ -41,6 +48,14 @@ class JournalEntry {
     MFPNutrition? nutrition;
     if (map['mfp_calories'] != null) {
       nutrition = MFPNutrition.fromMap(map);
+    }
+
+    HealthData? healthData;
+    if (map['health_steps'] != null ||
+        map['health_active_calories'] != null ||
+        map['health_heart_rate'] != null ||
+        map['health_sleep_minutes'] != null) {
+      healthData = HealthData.fromMap(map);
     }
 
     return JournalEntry(
@@ -51,6 +66,7 @@ class JournalEntry {
       content: map['content'] as String?,
       moodEmoji: map['mood_emoji'] as String?,
       mfpNutrition: nutrition,
+      healthData: healthData,
     );
   }
 
@@ -62,6 +78,7 @@ class JournalEntry {
     String? content,
     String? moodEmoji,
     MFPNutrition? mfpNutrition,
+    HealthData? healthData,
   }) {
     return JournalEntry(
       id: id ?? this.id,
@@ -71,6 +88,7 @@ class JournalEntry {
       content: content ?? this.content,
       moodEmoji: moodEmoji ?? this.moodEmoji,
       mfpNutrition: mfpNutrition ?? this.mfpNutrition,
+      healthData: healthData ?? this.healthData,
     );
   }
 }

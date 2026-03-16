@@ -25,7 +25,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -169,6 +169,21 @@ class DatabaseHelper {
       );
       await db.execute('ALTER TABLE journal_entries ADD COLUMN mfp_sugar REAL');
     }
+
+    if (oldVersion < 5) {
+      await db.execute(
+        'ALTER TABLE journal_entries ADD COLUMN health_steps INTEGER',
+      );
+      await db.execute(
+        'ALTER TABLE journal_entries ADD COLUMN health_active_calories REAL',
+      );
+      await db.execute(
+        'ALTER TABLE journal_entries ADD COLUMN health_heart_rate REAL',
+      );
+      await db.execute(
+        'ALTER TABLE journal_entries ADD COLUMN health_sleep_minutes INTEGER',
+      );
+    }
   }
 
   Future _insertDefaultCategories(Database db) async {
@@ -282,9 +297,6 @@ class DatabaseHelper {
   Future<int> updateJournalEntry(JournalEntry entry) async {
     final db = await instance.database;
     final map = entry.toMap();
-    print(
-      'updateJournalEntry: mfp_calories=${map['mfp_calories']}, mfp_protein=${map['mfp_protein']}',
-    );
     return db.update(
       'journal_entries',
       map,
@@ -305,6 +317,21 @@ class DatabaseHelper {
         'mfp_fiber': null,
         'mfp_sodium': null,
         'mfp_sugar': null,
+      },
+      where: 'id = ?',
+      whereArgs: [entryId],
+    );
+  }
+
+  Future<int> clearHealthData(int entryId) async {
+    final db = await instance.database;
+    return await db.update(
+      'journal_entries',
+      {
+        'health_steps': null,
+        'health_active_calories': null,
+        'health_heart_rate': null,
+        'health_sleep_minutes': null,
       },
       where: 'id = ?',
       whereArgs: [entryId],
