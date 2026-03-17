@@ -102,7 +102,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
             ),
         ],
       ),
-      body: _isEditing ? _buildEditMode() : _buildViewMode(),
+      body: SafeArea(child: _isEditing ? _buildEditMode() : _buildViewMode()),
     );
   }
 
@@ -341,9 +341,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 16),
                         child: CustomFieldInput(
-                          key: ValueKey(
-                            'field_${def.id}_${_fieldValues[def.id]}',
-                          ),
+                          key: ValueKey('field_${def.id}'),
                           definition: def,
                           initialValue: _fieldValues[def.id],
                           onChanged: (value) {

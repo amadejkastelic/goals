@@ -58,31 +58,33 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: Consumer2<GoalsProvider, CategoriesProvider>(
-        builder: (context, goalsProvider, categoriesProvider, _) {
-          if (goalsProvider.isLoading) {
-            return const LoadingWidget(message: 'Loading goals...');
-          }
+      body: SafeArea(
+        child: Consumer2<GoalsProvider, CategoriesProvider>(
+          builder: (context, goalsProvider, categoriesProvider, _) {
+            if (goalsProvider.isLoading) {
+              return const LoadingWidget(message: 'Loading goals...');
+            }
 
-          if (goalsProvider.error != null) {
-            return ErrorDisplayWidget(
-              message: goalsProvider.error!,
-              onRetry: () {
-                goalsProvider.clearError();
-                _loadData();
-              },
+            if (goalsProvider.error != null) {
+              return ErrorDisplayWidget(
+                message: goalsProvider.error!,
+                onRetry: () {
+                  goalsProvider.clearError();
+                  _loadData();
+                },
+              );
+            }
+
+            return Column(
+              children: [
+                _buildFilters(categoriesProvider),
+                Expanded(
+                  child: _buildGoalsList(goalsProvider, categoriesProvider),
+                ),
+              ],
             );
-          }
-
-          return Column(
-            children: [
-              _buildFilters(categoriesProvider),
-              Expanded(
-                child: _buildGoalsList(goalsProvider, categoriesProvider),
-              ),
-            ],
-          );
-        },
+          },
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _createGoal(context),

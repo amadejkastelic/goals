@@ -80,111 +80,117 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
           ),
         ],
       ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            TextFormField(
-              controller: _titleController,
-              decoration: const InputDecoration(
-                labelText: 'Title',
-                border: OutlineInputBorder(),
+      body: SafeArea(
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              TextFormField(
+                controller: _titleController,
+                decoration: const InputDecoration(
+                  labelText: 'Title',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) => v?.isEmpty == true ? 'Required' : null,
               ),
-              validator: (v) => v?.isEmpty == true ? 'Required' : null,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _descriptionController,
-              decoration: const InputDecoration(
-                labelText: 'Description',
-                border: OutlineInputBorder(),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _descriptionController,
+                decoration: const InputDecoration(
+                  labelText: 'Description',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
               ),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 16),
-            Consumer<CategoriesProvider>(
-              builder: (context, provider, _) {
-                return DropdownButtonFormField<int>(
-                  initialValue: _categoryId,
-                  decoration: const InputDecoration(
-                    labelText: 'Category',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: provider.categories.map((cat) {
-                    return DropdownMenuItem(
-                      value: cat.id,
-                      child: Text('${cat.emoji ?? ''} ${cat.name}'.trim()),
-                    );
-                  }).toList(),
-                  onChanged: (v) => setState(() => _categoryId = v),
-                );
-              },
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _durationController,
-              decoration: const InputDecoration(
-                labelText: 'Duration (days)',
-                border: OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.number,
-              validator: (v) {
-                final n = int.tryParse(v ?? '');
-                return n == null || n < 1 ? 'Enter a valid number' : null;
-              },
-            ),
-            const SizedBox(height: 16),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Start Date'),
-              subtitle: Text(DateFormat.yMMMd().format(_startDate)),
-              trailing: const Icon(Icons.calendar_today),
-              onTap: _pickDate,
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              initialValue: _status,
-              decoration: const InputDecoration(
-                labelText: 'Status',
-                border: OutlineInputBorder(),
-              ),
-              items: ['active', 'paused', 'completed', 'abandoned'].map((s) {
-                return DropdownMenuItem(
-                  value: s,
-                  child: Text(s[0].toUpperCase() + s.substring(1)),
-                );
-              }).toList(),
-              onChanged: (v) => setState(() => _status = v!),
-            ),
-            const SizedBox(height: 24),
-            const Divider(),
-            const SizedBox(height: 8),
-            widget.goal?.id != null
-                ? Consumer<CustomFieldsProvider>(
-                    builder: (context, provider, _) {
-                      if (provider.isLoadingForGoal(widget.goal!.id!)) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                      final fields = provider.getDefinitionsForGoal(
-                        widget.goal!.id!,
+              const SizedBox(height: 16),
+              Consumer<CategoriesProvider>(
+                builder: (context, provider, _) {
+                  return DropdownButtonFormField<int>(
+                    initialValue: _categoryId,
+                    decoration: const InputDecoration(
+                      labelText: 'Category',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: provider.categories.map((cat) {
+                      return DropdownMenuItem(
+                        value: cat.id,
+                        child: Text('${cat.emoji ?? ''} ${cat.name}'.trim()),
                       );
-                      if (_customFields.isEmpty && fields.isNotEmpty) {
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          setState(() => _customFields = List.from(fields));
-                        });
-                      }
-                      return CustomFieldEditor(
-                        fields: _customFields.isEmpty ? fields : _customFields,
-                        onChanged: (f) => _customFields = f,
-                      );
-                    },
-                  )
-                : CustomFieldEditor(
-                    fields: _customFields,
-                    onChanged: (f) => _customFields = f,
-                  ),
-          ],
+                    }).toList(),
+                    onChanged: (v) => setState(() => _categoryId = v),
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _durationController,
+                decoration: const InputDecoration(
+                  labelText: 'Duration (days)',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.number,
+                validator: (v) {
+                  final n = int.tryParse(v ?? '');
+                  return n == null || n < 1 ? 'Enter a valid number' : null;
+                },
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Start Date'),
+                subtitle: Text(DateFormat.yMMMd().format(_startDate)),
+                trailing: const Icon(Icons.calendar_today),
+                onTap: _pickDate,
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: _status,
+                decoration: const InputDecoration(
+                  labelText: 'Status',
+                  border: OutlineInputBorder(),
+                ),
+                items: ['active', 'paused', 'completed', 'abandoned'].map((s) {
+                  return DropdownMenuItem(
+                    value: s,
+                    child: Text(s[0].toUpperCase() + s.substring(1)),
+                  );
+                }).toList(),
+                onChanged: (v) => setState(() => _status = v!),
+              ),
+              const SizedBox(height: 24),
+              const Divider(),
+              const SizedBox(height: 8),
+              widget.goal?.id != null
+                  ? Consumer<CustomFieldsProvider>(
+                      builder: (context, provider, _) {
+                        if (provider.isLoadingForGoal(widget.goal!.id!)) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
+                        final fields = provider.getDefinitionsForGoal(
+                          widget.goal!.id!,
+                        );
+                        if (_customFields.isEmpty && fields.isNotEmpty) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            setState(() => _customFields = List.from(fields));
+                          });
+                        }
+                        return CustomFieldEditor(
+                          fields: _customFields.isEmpty
+                              ? fields
+                              : _customFields,
+                          onChanged: (f) => _customFields = f,
+                        );
+                      },
+                    )
+                  : CustomFieldEditor(
+                      fields: _customFields,
+                      onChanged: (f) => _customFields = f,
+                    ),
+            ],
+          ),
         ),
       ),
     );

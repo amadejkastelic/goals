@@ -24,43 +24,45 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Categories')),
-      body: Consumer<CategoriesProvider>(
-        builder: (context, provider, child) {
-          if (provider.isLoading) {
-            return const LoadingWidget(message: 'Loading categories...');
-          }
+      body: SafeArea(
+        child: Consumer<CategoriesProvider>(
+          builder: (context, provider, child) {
+            if (provider.isLoading) {
+              return const LoadingWidget(message: 'Loading categories...');
+            }
 
-          if (provider.error != null) {
-            return ErrorDisplayWidget(
-              message: provider.error!,
-              onRetry: () {
-                provider.clearError();
-                provider.loadCategories();
-              },
+            if (provider.error != null) {
+              return ErrorDisplayWidget(
+                message: provider.error!,
+                onRetry: () {
+                  provider.clearError();
+                  provider.loadCategories();
+                },
+              );
+            }
+
+            if (provider.categories.isEmpty) {
+              return EmptyStateWidget(
+                icon: Icons.category_outlined,
+                title: 'No categories',
+                description: 'Add your first category to organize your goals.',
+                actionLabel: 'Add Category',
+                onAction: () => _showAddDialog(context),
+              );
+            }
+
+            return RefreshIndicator(
+              onRefresh: () => provider.loadCategories(),
+              child: ListView.builder(
+                itemCount: provider.categories.length,
+                itemBuilder: (context, index) {
+                  final category = provider.categories[index];
+                  return _buildCategoryTile(context, category, provider);
+                },
+              ),
             );
-          }
-
-          if (provider.categories.isEmpty) {
-            return EmptyStateWidget(
-              icon: Icons.category_outlined,
-              title: 'No categories',
-              description: 'Add your first category to organize your goals.',
-              actionLabel: 'Add Category',
-              onAction: () => _showAddDialog(context),
-            );
-          }
-
-          return RefreshIndicator(
-            onRefresh: () => provider.loadCategories(),
-            child: ListView.builder(
-              itemCount: provider.categories.length,
-              itemBuilder: (context, index) {
-                final category = provider.categories[index];
-                return _buildCategoryTile(context, category, provider);
-              },
-            ),
-          );
-        },
+          },
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showAddDialog(context),

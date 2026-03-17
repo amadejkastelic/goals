@@ -79,10 +79,12 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
           ),
         ],
       ),
-      body: Consumer<JournalProvider>(
-        builder: (context, journalProvider, child) {
-          return _buildBody(context, journalProvider);
-        },
+      body: SafeArea(
+        child: Consumer<JournalProvider>(
+          builder: (context, journalProvider, child) {
+            return _buildBody(context, journalProvider);
+          },
+        ),
       ),
     );
   }
