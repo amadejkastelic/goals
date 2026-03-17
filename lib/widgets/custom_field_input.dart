@@ -23,11 +23,29 @@ class CustomFieldInput extends StatefulWidget {
 
 class _CustomFieldInputState extends State<CustomFieldInput> {
   late dynamic _value;
+  TextEditingController? _textController;
 
   @override
   void initState() {
     super.initState();
     _value = _parseInitialValue();
+    _initControllerIfNeeded();
+  }
+
+  void _initControllerIfNeeded() {
+    if (widget.definition.fieldType == CustomFieldType.text ||
+        widget.definition.fieldType == CustomFieldType.number) {
+      final initialText = widget.definition.fieldType == CustomFieldType.text
+          ? _value as String
+          : (_value == 0 ? '' : _value.toString());
+      _textController = TextEditingController(text: initialText);
+    }
+  }
+
+  @override
+  void dispose() {
+    _textController?.dispose();
+    super.dispose();
   }
 
   dynamic _parseInitialValue() {
@@ -247,20 +265,23 @@ class _CustomFieldInputState extends State<CustomFieldInput> {
   }
 
   Widget _buildText() {
-    return TextFormField(
-      initialValue: _value as String,
+    return TextField(
+      controller: _textController,
       decoration: const InputDecoration(
         border: OutlineInputBorder(),
         isDense: true,
       ),
       maxLines: null,
-      onChanged: _updateValue,
+      onChanged: (v) {
+        _value = v;
+        widget.onChanged(v);
+      },
     );
   }
 
   Widget _buildNumber() {
-    return TextFormField(
-      initialValue: _value == 0 ? '' : _value.toString(),
+    return TextField(
+      controller: _textController,
       decoration: const InputDecoration(
         border: OutlineInputBorder(),
         isDense: true,
@@ -268,9 +289,8 @@ class _CustomFieldInputState extends State<CustomFieldInput> {
       keyboardType: TextInputType.number,
       onChanged: (v) {
         final parsed = num.tryParse(v);
-        if (parsed != null) {
-          _updateValue(parsed);
-        }
+        _value = parsed ?? 0;
+        widget.onChanged(v);
       },
     );
   }
@@ -341,7 +361,7 @@ class _CustomFieldInputState extends State<CustomFieldInput> {
   Widget _buildDropdown() {
     final options = widget.definition.options;
     return DropdownButtonFormField<String>(
-      key: ValueKey('dropdown_${widget.definition.id}_${widget.initialValue}'),
+      key: ValueKey('dropdown_${widget.definition.id}'),
       initialValue: _value as String?,
       decoration: const InputDecoration(
         border: OutlineInputBorder(),

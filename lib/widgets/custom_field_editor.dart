@@ -194,7 +194,7 @@ class _CustomFieldEditorState extends State<CustomFieldEditor> {
             itemBuilder: (context, index) {
               final field = _fields[index];
               return _FieldEditorCard(
-                key: ValueKey('field_${field.name}_$index'),
+                key: ValueKey('field_$index'),
                 field: field,
                 index: index,
                 onChanged: (f) => _updateField(index, f),
