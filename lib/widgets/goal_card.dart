@@ -48,6 +48,19 @@ class GoalCard extends StatelessWidget {
                             ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                     ),
+                    if (goal.isFasting && goal.fastingProtocol != null)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Chip(
+                          label: Text(
+                            '${goal.fastingProtocol!.icon} ${goal.fastingProtocol!.displayName}',
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                          visualDensity: VisualDensity.compact,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
                     _buildStatusChip(context),
                   ],
                 ),

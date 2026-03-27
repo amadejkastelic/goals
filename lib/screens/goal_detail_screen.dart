@@ -5,8 +5,8 @@ import '../models/goal.dart';
 import '../models/category.dart';
 import '../models/journal_entry.dart';
 import '../providers/goals_provider.dart';
-
 import '../providers/journal_provider.dart';
+import '../providers/fasting_provider.dart';
 import '../db/database_helper.dart';
 import '../widgets/journal_day_tile.dart';
 import 'journal_entry_screen.dart';
@@ -45,6 +45,11 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
 
     if (mounted) {
       await context.read<JournalProvider>().loadEntriesForGoal(widget.goalId);
+      if (goal.isFasting) {
+        await context.read<FastingProvider>().loadSessionsForGoal(
+          widget.goalId,
+        );
+      }
       setState(() {
         _goal = goal;
         _category = category;
@@ -105,12 +110,137 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildHeader(context),
+          if (_goal!.isFasting) ...[
+            const SizedBox(height: 16),
+            _buildFastingStats(context),
+          ],
           const SizedBox(height: 24),
           Text('Progress', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 12),
           _buildDaysGrid(startDate, today, entries, journalProvider),
         ],
       ),
+    );
+  }
+
+  Widget _buildFastingStats(BuildContext context) {
+    return Consumer<FastingProvider>(
+      builder: (context, provider, _) {
+        final currentStreak = provider.getCurrentStreak(widget.goalId);
+        final bestStreak = provider.getBestStreak(widget.goalId);
+        final avgHours = provider.getAverageHours(widget.goalId);
+        final longestFast = provider.getLongestFast(widget.goalId);
+
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.timelapse, size: 18),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Fasting Stats',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const Spacer(),
+                    if (_goal!.fastingProtocol != null)
+                      Chip(
+                        label: Text(
+                          _goal!.fastingProtocol!.displayName,
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildStatItem(
+                        context,
+                        'Current Streak',
+                        '$currentStreak',
+                        'days',
+                        Icons.local_fire_department,
+                        currentStreak > 0 ? Colors.orange : Colors.grey,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildStatItem(
+                        context,
+                        'Best Streak',
+                        '$bestStreak',
+                        'days',
+                        Icons.emoji_events,
+                        Colors.amber,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildStatItem(
+                        context,
+                        'Avg Fast',
+                        avgHours.toStringAsFixed(1),
+                        'hours',
+                        Icons.analytics,
+                        Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildStatItem(
+                        context,
+                        'Longest Fast',
+                        longestFast.toStringAsFixed(1),
+                        'hours',
+                        Icons.timer,
+                        Colors.green,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStatItem(
+    BuildContext context,
+    String label,
+    String value,
+    String unit,
+    IconData icon,
+    Color color,
+  ) {
+    return Column(
+      children: [
+        Icon(icon, size: 20, color: color),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        Text(
+          '$label ($unit)',
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          textAlign: TextAlign.center,
+        ),
+      ],
     );
   }
 
@@ -147,6 +277,15 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
                   Chip(
                     label: Text(
                       '${_category!.emoji ?? ''} ${_category!.name}'.trim(),
+                    ),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  const SizedBox(width: 16),
+                ],
+                if (_goal!.isFasting && _goal!.fastingProtocol != null) ...[
+                  Chip(
+                    label: Text(
+                      '${_goal!.fastingProtocol!.icon} ${_goal!.fastingProtocol!.displayName}',
                     ),
                     visualDensity: VisualDensity.compact,
                   ),
@@ -227,6 +366,10 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     List<JournalEntry> entries,
     JournalProvider journalProvider,
   ) {
+    final fastingProvider = _goal!.isFasting
+        ? context.read<FastingProvider>()
+        : null;
+
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -243,12 +386,24 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
         final isFuture = dayDate.isAfter(today);
         final entry = journalProvider.getEntry(widget.goalId, dayNumber);
 
+        double? fastingAchievement;
+        if (_goal!.isFasting && entry?.id != null && fastingProvider != null) {
+          final session = fastingProvider.getSessionForEntry(entry!.id!);
+          if (session?.actualFastingHours != null) {
+            fastingAchievement =
+                session!.actualFastingHours! /
+                _goal!.effectiveFastingTargetHours;
+          }
+        }
+
         return JournalDayTile(
           dayNumber: dayNumber,
           date: dayDate,
           entry: entry,
           isToday: isToday,
           isFuture: isFuture,
+          isFastingGoal: _goal!.isFasting,
+          fastingAchievement: fastingAchievement,
           onTap: () => _openJournalEntry(dayNumber, dayDate, entry),
         );
       },
@@ -264,6 +419,8 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
           dayNumber: dayNumber,
           date: date,
           existingEntry: entry,
+          isFastingGoal: _goal!.isFasting,
+          fastingTargetHours: _goal!.effectiveFastingTargetHours,
         ),
       ),
     );
@@ -302,22 +459,16 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
           context,
           MaterialPageRoute(builder: (_) => GoalFormScreen(goal: _goal)),
         );
-        break;
       case 'active':
         await _updateStatus('active');
-        break;
       case 'complete':
         await _updateStatus('completed');
-        break;
       case 'pause':
         await _updateStatus('paused');
-        break;
       case 'abandon':
         await _updateStatus('abandoned');
-        break;
       case 'delete':
         await _deleteGoal();
-        break;
     }
   }
 
@@ -330,6 +481,10 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
       durationDays: _goal!.durationDays,
       startDate: _goal!.startDate,
       status: status,
+      goalType: _goal!.goalType,
+      fastingProtocol: _goal!.fastingProtocol,
+      fastingTargetHours: _goal!.fastingTargetHours,
+      eatingWindowStart: _goal!.eatingWindowStart,
     );
     await context.read<GoalsProvider>().updateGoal(updatedGoal);
     setState(() => _goal = updatedGoal);
@@ -360,8 +515,10 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     if (confirmed == true && mounted) {
       final goalsProvider = context.read<GoalsProvider>();
       final journalProvider = context.read<JournalProvider>();
+      final fastingProvider = context.read<FastingProvider>();
       await goalsProvider.deleteGoal(widget.goalId);
       journalProvider.clearGoal(widget.goalId);
+      fastingProvider.clearGoal(widget.goalId);
       if (mounted) Navigator.pop(context);
     }
   }

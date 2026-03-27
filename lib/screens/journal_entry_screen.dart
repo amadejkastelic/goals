@@ -8,10 +8,13 @@ import '../models/journal_entry.dart';
 import '../models/media_attachment.dart';
 import '../models/custom_field_definition.dart';
 import '../models/custom_field_value.dart';
+import '../models/fasting_session.dart';
 import '../providers/journal_provider.dart';
 import '../providers/custom_fields_provider.dart';
+import '../providers/fasting_provider.dart';
 import '../widgets/media_gallery.dart';
 import '../widgets/custom_field_input.dart';
+import '../widgets/fasting_summary_card.dart';
 import '../models/mfp_nutrition.dart';
 import '../models/health_data.dart';
 import '../widgets/mfp_nutrition_tile.dart';
@@ -24,6 +27,8 @@ class JournalEntryScreen extends StatefulWidget {
   final int dayNumber;
   final DateTime date;
   final JournalEntry? existingEntry;
+  final bool isFastingGoal;
+  final double fastingTargetHours;
 
   const JournalEntryScreen({
     super.key,
@@ -31,6 +36,8 @@ class JournalEntryScreen extends StatefulWidget {
     required this.dayNumber,
     required this.date,
     this.existingEntry,
+    this.isFastingGoal = false,
+    this.fastingTargetHours = 16.0,
   });
 
   @override
@@ -49,6 +56,24 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
   final List<CustomFieldDefinition> _fieldDefinitions = [];
   final List<CustomFieldDefinition> _pendingEntrySpecificDefinitions = [];
   final Map<int, String> _fieldValues = {};
+
+  TimeOfDay? _fastStartTime;
+  TimeOfDay? _eatingStartTime;
+  TimeOfDay? _eatingEndTime;
+  double? _actualFastingHours;
+  final Set<String> _selectedFeelingTags = {};
+  final TextEditingController _breakNoteController = TextEditingController();
+  FastingSession? _fastingSession;
+  final List<String> _availableFeelingTags = [
+    'Energized',
+    'Tired',
+    'Hungry',
+    'Focused',
+    'Dizzy',
+    'Great',
+    'Weak',
+    'Clear-headed',
+  ];
 
   @override
   void initState() {
@@ -74,6 +99,11 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
         context.read<CustomFieldsProvider>().loadEntrySpecificDefinitions(
           widget.existingEntry!.id!,
         );
+        if (widget.isFastingGoal) {
+          context.read<FastingProvider>().loadSessionsForEntry(
+            widget.existingEntry!.id!,
+          );
+        }
       }
     });
   }
@@ -81,6 +111,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
   @override
   void dispose() {
     _contentController.dispose();
+    _breakNoteController.dispose();
     super.dispose();
   }
 
@@ -120,6 +151,14 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
             dateFormat.format(widget.date),
             style: Theme.of(context).textTheme.titleMedium,
           ),
+          if (widget.isFastingGoal && _fastingSession != null) ...[
+            const SizedBox(height: 16),
+            FastingSummaryCard(
+              session: _fastingSession!,
+              targetHours: widget.fastingTargetHours,
+              readOnly: true,
+            ),
+          ],
           const SizedBox(height: 24),
           if (hasMood) ...[
             Text('Mood', style: Theme.of(context).textTheme.bodyLarge),
@@ -256,6 +295,10 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
               dateFormat.format(widget.date),
               style: Theme.of(context).textTheme.titleMedium,
             ),
+            if (widget.isFastingGoal) ...[
+              const SizedBox(height: 16),
+              _buildFastingSection(),
+            ],
             const SizedBox(height: 24),
             Text(
               'How are you feeling?',
@@ -278,88 +321,89 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
             _buildMFPSection(),
             const SizedBox(height: 12),
             _buildHealthSection(),
-            Consumer<CustomFieldsProvider>(
-              builder: (context, provider, _) {
-                final goalDefinitions = provider.getDefinitionsForGoal(
-                  widget.goalId,
-                );
-                final savedEntryDefinitions = _savedEntry?.id != null
-                    ? provider.getEntrySpecificDefinitions(_savedEntry!.id!)
-                    : <CustomFieldDefinition>[];
-
-                if (_fieldDefinitions.isEmpty && goalDefinitions.isNotEmpty) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    setState(() => _fieldDefinitions.addAll(goalDefinitions));
-                  });
-                }
-
-                final allDefinitions = [
-                  ...goalDefinitions,
-                  ...savedEntryDefinitions,
-                  ..._pendingEntrySpecificDefinitions,
-                ];
-
-                if (widget.existingEntry?.id != null) {
-                  final providerValues = provider.getValuesForEntry(
-                    widget.existingEntry!.id!,
+            if (!widget.isFastingGoal)
+              Consumer<CustomFieldsProvider>(
+                builder: (context, provider, _) {
+                  final goalDefinitions = provider.getDefinitionsForGoal(
+                    widget.goalId,
                   );
-                  final needsUpdate =
-                      providerValues.isNotEmpty &&
-                      providerValues.any(
-                        (v) => !_fieldValues.containsKey(v.definitionId),
-                      );
-                  if (needsUpdate) {
+                  final savedEntryDefinitions = _savedEntry?.id != null
+                      ? provider.getEntrySpecificDefinitions(_savedEntry!.id!)
+                      : <CustomFieldDefinition>[];
+
+                  if (_fieldDefinitions.isEmpty && goalDefinitions.isNotEmpty) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
-                      setState(() {
-                        for (final v in providerValues) {
-                          _fieldValues[v.definitionId] = v.value;
-                        }
-                      });
+                      setState(() => _fieldDefinitions.addAll(goalDefinitions));
                     });
                   }
-                }
 
-                if (allDefinitions.isEmpty) {
-                  return TextButton.icon(
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add Custom Field'),
-                    onPressed: () => _showAddFieldDialog(),
-                  );
-                }
+                  final allDefinitions = [
+                    ...goalDefinitions,
+                    ...savedEntryDefinitions,
+                    ..._pendingEntrySpecificDefinitions,
+                  ];
 
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Divider(),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Custom Fields',
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                    const SizedBox(height: 12),
-                    ...allDefinitions.map((def) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: CustomFieldInput(
-                          key: ValueKey('field_${def.id}'),
-                          definition: def,
-                          initialValue: _fieldValues[def.id],
-                          onChanged: (value) {
-                            _fieldValues[def.id!] = value;
-                          },
-                        ),
-                      );
-                    }),
-                    TextButton.icon(
+                  if (widget.existingEntry?.id != null) {
+                    final providerValues = provider.getValuesForEntry(
+                      widget.existingEntry!.id!,
+                    );
+                    final needsUpdate =
+                        providerValues.isNotEmpty &&
+                        providerValues.any(
+                          (v) => !_fieldValues.containsKey(v.definitionId),
+                        );
+                    if (needsUpdate) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        setState(() {
+                          for (final v in providerValues) {
+                            _fieldValues[v.definitionId] = v.value;
+                          }
+                        });
+                      });
+                    }
+                  }
+
+                  if (allDefinitions.isEmpty) {
+                    return TextButton.icon(
                       icon: const Icon(Icons.add),
                       label: const Text('Add Custom Field'),
                       onPressed: () => _showAddFieldDialog(),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                );
-              },
-            ),
+                    );
+                  }
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Divider(),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Custom Fields',
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                      const SizedBox(height: 12),
+                      ...allDefinitions.map((def) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: CustomFieldInput(
+                            key: ValueKey('field_${def.id}'),
+                            definition: def,
+                            initialValue: _fieldValues[def.id],
+                            onChanged: (value) {
+                              _fieldValues[def.id!] = value;
+                            },
+                          ),
+                        );
+                      }),
+                      TextButton.icon(
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add Custom Field'),
+                        onPressed: () => _showAddFieldDialog(),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                  );
+                },
+              ),
             const SizedBox(height: 24),
             Text('Media', style: Theme.of(context).textTheme.bodyLarge),
             const SizedBox(height: 12),
@@ -381,6 +425,282 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildFastingSection() {
+    return Consumer<FastingProvider>(
+      builder: (context, provider, _) {
+        if (_savedEntry?.id != null && _fastingSession == null) {
+          final session = provider.getSessionForEntry(_savedEntry!.id!);
+          if (session != null && _fastingSession == null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              setState(() {
+                _fastingSession = session;
+                _selectedFeelingTags.clear();
+                _selectedFeelingTags.addAll(session.feelingTags);
+                _breakNoteController.text = session.breakNote ?? '';
+                _actualFastingHours = session.actualFastingHours;
+                if (session.fastStartedAt != null) {
+                  _fastStartTime = TimeOfDay.fromDateTime(
+                    session.fastStartedAt!,
+                  );
+                }
+                if (session.eatingStartedAt != null) {
+                  _eatingStartTime = TimeOfDay.fromDateTime(
+                    session.eatingStartedAt!,
+                  );
+                }
+                if (session.eatingEndedAt != null) {
+                  _eatingEndTime = TimeOfDay.fromDateTime(
+                    session.eatingEndedAt!,
+                  );
+                }
+              });
+            });
+          }
+        }
+
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.timelapse, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Fasting',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const Spacer(),
+                    Text(
+                      'Target: ${widget.fastingTargetHours.toStringAsFixed(widget.fastingTargetHours == widget.fastingTargetHours.roundToDouble() ? 0 : 1)}h',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _buildTimePicker(
+                  'Fast started',
+                  _fastStartTime,
+                  (time) => setState(() {
+                    _fastStartTime = time;
+                    _calculateFastingHours();
+                  }),
+                ),
+                const SizedBox(height: 8),
+                _buildTimePicker(
+                  'Eating window started',
+                  _eatingStartTime,
+                  (time) => setState(() {
+                    _eatingStartTime = time;
+                    _calculateFastingHours();
+                  }),
+                ),
+                const SizedBox(height: 8),
+                _buildTimePicker(
+                  'Fast resumed',
+                  _eatingEndTime,
+                  (time) => setState(() {
+                    _eatingEndTime = time;
+                    _calculateFastingHours();
+                  }),
+                ),
+                if (_actualFastingHours != null) ...[
+                  const SizedBox(height: 16),
+                  _buildFastingProgressBar(context),
+                ],
+                const SizedBox(height: 16),
+                Text(
+                  'How did you feel?',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: _availableFeelingTags.map((tag) {
+                    final isSelected = _selectedFeelingTags.contains(tag);
+                    return FilterChip(
+                      label: Text(tag),
+                      selected: isSelected,
+                      onSelected: (selected) {
+                        setState(() {
+                          if (selected) {
+                            _selectedFeelingTags.add(tag);
+                          } else {
+                            _selectedFeelingTags.remove(tag);
+                          }
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _breakNoteController,
+                  decoration: const InputDecoration(
+                    labelText: 'What broke the fast?',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  maxLines: 2,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildTimePicker(
+    String label,
+    TimeOfDay? value,
+    ValueChanged<TimeOfDay> onChanged,
+  ) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      title: Text(label),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            value != null ? value.format(context) : '--:--',
+            style: TextStyle(
+              fontWeight: FontWeight.w500,
+              color: value != null
+                  ? Theme.of(context).colorScheme.primary
+                  : Colors.grey,
+            ),
+          ),
+          const SizedBox(width: 4),
+          const Icon(Icons.access_time, size: 20),
+        ],
+      ),
+      onTap: () async {
+        final picked = await showTimePicker(
+          context: context,
+          initialTime: value ?? TimeOfDay.now(),
+        );
+        if (picked != null) onChanged(picked);
+      },
+    );
+  }
+
+  Widget _buildFastingProgressBar(BuildContext context) {
+    if (_actualFastingHours == null) return const SizedBox.shrink();
+
+    final ratio = (_actualFastingHours! / widget.fastingTargetHours).clamp(
+      0.0,
+      1.5,
+    );
+    final achieved = ratio >= 1.0;
+    final percent = (ratio * 100).round();
+    final hours = _actualFastingHours!.floor();
+    final minutes = ((_actualFastingHours! - hours) * 60).round();
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Text(
+              '${hours}h ${minutes}m',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+                color: achieved ? Colors.green : Colors.orange,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              achieved
+                  ? 'Target reached!'
+                  : 'of ${widget.fastingTargetHours.toStringAsFixed(0)}h target',
+              style: TextStyle(
+                fontSize: 12,
+                color: achieved ? Colors.green : Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: LinearProgressIndicator(
+            value: ratio >= 1.0 ? 1.0 : ratio,
+            minHeight: 8,
+            backgroundColor: Colors.grey.shade200,
+            valueColor: AlwaysStoppedAnimation<Color>(
+              achieved
+                  ? Colors.green
+                  : ratio >= 0.75
+                  ? Colors.orange
+                  : Colors.red.shade300,
+            ),
+          ),
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: Text(
+            '$percent%',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: achieved ? Colors.green : Colors.orange,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _calculateFastingHours() {
+    if (_fastStartTime == null || _eatingStartTime == null) {
+      setState(() => _actualFastingHours = null);
+      return;
+    }
+
+    final baseDate = DateTime(
+      widget.date.year,
+      widget.date.month,
+      widget.date.day,
+    );
+
+    DateTime fastStartDt = DateTime(
+      baseDate.year,
+      baseDate.month,
+      baseDate.day,
+      _fastStartTime!.hour,
+      _fastStartTime!.minute,
+    );
+
+    if (fastStartDt.hour >= 12) {
+      fastStartDt = fastStartDt.subtract(const Duration(days: 1));
+    }
+
+    DateTime eatingStartDt = DateTime(
+      baseDate.year,
+      baseDate.month,
+      baseDate.day,
+      _eatingStartTime!.hour,
+      _eatingStartTime!.minute,
+    );
+
+    Duration diff = eatingStartDt.difference(fastStartDt);
+    if (diff.isNegative) {
+      diff = Duration.zero;
+    }
+
+    setState(() {
+      _actualFastingHours = diff.inMinutes / 60.0;
+    });
   }
 
   Widget _buildMoodSelector() {
@@ -813,6 +1133,67 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
             valuesToSave,
           );
         }
+
+        if (widget.isFastingGoal && _fastStartTime != null) {
+          final baseDate = DateTime(
+            widget.date.year,
+            widget.date.month,
+            widget.date.day,
+          );
+
+          DateTime fastStartDt = DateTime(
+            baseDate.year,
+            baseDate.month,
+            baseDate.day,
+            _fastStartTime!.hour,
+            _fastStartTime!.minute,
+          );
+          if (fastStartDt.hour >= 12) {
+            fastStartDt = fastStartDt.subtract(const Duration(days: 1));
+          }
+
+          DateTime? eatingStartDt;
+          if (_eatingStartTime != null) {
+            eatingStartDt = DateTime(
+              baseDate.year,
+              baseDate.month,
+              baseDate.day,
+              _eatingStartTime!.hour,
+              _eatingStartTime!.minute,
+            );
+          }
+
+          DateTime? eatingEndDt;
+          if (_eatingEndTime != null) {
+            eatingEndDt = DateTime(
+              baseDate.year,
+              baseDate.month,
+              baseDate.day,
+              _eatingEndTime!.hour,
+              _eatingEndTime!.minute,
+            );
+          }
+
+          final session = FastingSession(
+            id: _fastingSession?.id,
+            journalEntryId: saved!.id!,
+            fastStartedAt: fastStartDt,
+            eatingStartedAt: eatingStartDt,
+            eatingEndedAt: eatingEndDt,
+            actualFastingHours: _actualFastingHours,
+            feelingTags: _selectedFeelingTags.toList(),
+            breakNote: _breakNoteController.text.trim().isEmpty
+                ? null
+                : _breakNoteController.text.trim(),
+          );
+
+          final savedSession = await context
+              .read<FastingProvider>()
+              .saveSession(session);
+          if (savedSession != null) {
+            setState(() => _fastingSession = savedSession);
+          }
+        }
       }
 
       if (mounted && saved != null) {
@@ -901,28 +1282,20 @@ class _AddFieldDialogState extends State<_AddFieldDialog> {
                 switch (type) {
                   case CustomFieldType.checkboxes:
                     label = 'Checkboxes';
-                    break;
                   case CustomFieldType.text:
                     label = 'Text';
-                    break;
                   case CustomFieldType.number:
                     label = 'Number';
-                    break;
                   case CustomFieldType.date:
                     label = 'Date';
-                    break;
                   case CustomFieldType.time:
                     label = 'Time';
-                    break;
                   case CustomFieldType.dropdown:
                     label = 'Dropdown';
-                    break;
                   case CustomFieldType.radio:
                     label = 'Radio Buttons';
-                    break;
                   case CustomFieldType.rating:
                     label = 'Rating';
-                    break;
                 }
                 return DropdownMenuItem(value: type, child: Text(label));
               }).toList(),

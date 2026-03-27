@@ -6,6 +6,7 @@ import '../models/journal_entry.dart';
 import '../models/media_attachment.dart';
 import '../models/custom_field_definition.dart';
 import '../models/custom_field_value.dart';
+import '../models/fasting_session.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -25,7 +26,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -49,7 +50,11 @@ class DatabaseHelper {
         category_id INTEGER REFERENCES categories(id),
         duration_days INTEGER NOT NULL,
         start_date TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'active'
+        status TEXT NOT NULL DEFAULT 'active',
+        goal_type TEXT NOT NULL DEFAULT 'regular',
+        fasting_protocol TEXT,
+        fasting_target_hours REAL,
+        eating_window_start TEXT
       )
     ''');
 
@@ -105,6 +110,19 @@ class DatabaseHelper {
         journal_entry_id INTEGER NOT NULL REFERENCES journal_entries(id) ON DELETE CASCADE,
         value TEXT NOT NULL,
         UNIQUE(definition_id, journal_entry_id)
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE fasting_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        journal_entry_id INTEGER NOT NULL REFERENCES journal_entries(id) ON DELETE CASCADE,
+        fast_started_at TEXT,
+        eating_started_at TEXT,
+        eating_ended_at TEXT,
+        actual_fasting_hours REAL,
+        feeling_tags TEXT,
+        break_note TEXT
       )
     ''');
 
@@ -187,6 +205,30 @@ class DatabaseHelper {
       await db.execute(
         'ALTER TABLE journal_entries ADD COLUMN health_sleep_minutes INTEGER',
       );
+    }
+
+    if (oldVersion < 6) {
+      await db.execute(
+        'ALTER TABLE goals ADD COLUMN goal_type TEXT NOT NULL DEFAULT \'regular\'',
+      );
+      await db.execute('ALTER TABLE goals ADD COLUMN fasting_protocol TEXT');
+      await db.execute(
+        'ALTER TABLE goals ADD COLUMN fasting_target_hours REAL',
+      );
+      await db.execute('ALTER TABLE goals ADD COLUMN eating_window_start TEXT');
+
+      await db.execute('''
+        CREATE TABLE fasting_sessions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          journal_entry_id INTEGER NOT NULL REFERENCES journal_entries(id) ON DELETE CASCADE,
+          fast_started_at TEXT,
+          eating_started_at TEXT,
+          eating_ended_at TEXT,
+          actual_fasting_hours REAL,
+          feeling_tags TEXT,
+          break_note TEXT
+        )
+      ''');
     }
   }
 
@@ -501,6 +543,83 @@ class DatabaseHelper {
         'journal_entry_id': journalEntryId,
         'value': value,
       });
+    }
+  }
+
+  Future<int> createFastingSession(FastingSession session) async {
+    final db = await instance.database;
+    return await db.insert('fasting_sessions', session.toMap());
+  }
+
+  Future<FastingSession?> readFastingSessionForEntry(int journalEntryId) async {
+    final db = await instance.database;
+    final maps = await db.query(
+      'fasting_sessions',
+      where: 'journal_entry_id = ?',
+      whereArgs: [journalEntryId],
+    );
+    if (maps.isEmpty) return null;
+    return FastingSession.fromMap(maps.first);
+  }
+
+  Future<List<FastingSession>> readFastingSessionsForGoal(int goalId) async {
+    final db = await instance.database;
+    final result = await db.rawQuery(
+      '''
+      SELECT fs.* FROM fasting_sessions fs
+      INNER JOIN journal_entries je ON fs.journal_entry_id = je.id
+      WHERE je.goal_id = ?
+      ORDER BY je.day_number ASC
+    ''',
+      [goalId],
+    );
+    return result.map((json) => FastingSession.fromMap(json)).toList();
+  }
+
+  Future<int> updateFastingSession(FastingSession session) async {
+    final db = await instance.database;
+    return db.update(
+      'fasting_sessions',
+      session.toMap(),
+      where: 'id = ?',
+      whereArgs: [session.id],
+    );
+  }
+
+  Future<int> deleteFastingSession(int id) async {
+    final db = await instance.database;
+    return await db.delete(
+      'fasting_sessions',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<void> saveFastingSession(FastingSession session) async {
+    final db = await instance.database;
+    if (session.id != null) {
+      await db.update(
+        'fasting_sessions',
+        session.toMap(),
+        where: 'id = ?',
+        whereArgs: [session.id],
+      );
+    } else {
+      final existing = await db.query(
+        'fasting_sessions',
+        where: 'journal_entry_id = ?',
+        whereArgs: [session.journalEntryId],
+      );
+      if (existing.isNotEmpty) {
+        await db.update(
+          'fasting_sessions',
+          session.toMap(),
+          where: 'journal_entry_id = ?',
+          whereArgs: [session.journalEntryId],
+        );
+      } else {
+        await db.insert('fasting_sessions', session.toMap());
+      }
     }
   }
 }

@@ -9,6 +9,7 @@ import 'providers/journal_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/custom_fields_provider.dart';
+import 'providers/fasting_provider.dart';
 import 'theme/app_theme.dart';
 import 'screens/home_screen.dart';
 import 'screens/categories_screen.dart';
@@ -41,6 +42,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => CategoriesProvider()),
         ChangeNotifierProvider(create: (_) => JournalProvider()),
         ChangeNotifierProvider(create: (_) => CustomFieldsProvider()),
+        ChangeNotifierProvider(create: (_) => FastingProvider()),
         ChangeNotifierProvider.value(value: notificationProvider),
       ],
       child: const NotificationConnector(child: ThemedApp()),
