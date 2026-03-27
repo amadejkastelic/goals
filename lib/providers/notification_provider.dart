@@ -4,18 +4,25 @@ import '../services/notification_service.dart';
 import '../models/goal.dart';
 
 class NotificationProvider extends ChangeNotifier {
-  static const String _notificationsEnabledKey = 'notifications_enabled';
+  static const String _enabledKey = 'notifications_enabled';
+  static const String _morningHourKey = 'notification_morning_hour';
+  static const String _eveningHourKey = 'notification_evening_hour';
+
   static const int defaultMorningHour = 9;
   static const int defaultEveningHour = 18;
 
   final NotificationService _notificationService = NotificationService();
 
   bool _notificationsEnabled = false;
+  int _morningHour = defaultMorningHour;
+  int _eveningHour = defaultEveningHour;
   bool _isInitialized = false;
   bool _isLoading = false;
   String? _error;
 
   bool get notificationsEnabled => _notificationsEnabled;
+  int get morningHour => _morningHour;
+  int get eveningHour => _eveningHour;
   bool get isLoading => _isLoading;
   String? get error => _error;
 
@@ -29,7 +36,9 @@ class NotificationProvider extends ChangeNotifier {
       await _notificationService.initialize();
 
       final prefs = await SharedPreferences.getInstance();
-      _notificationsEnabled = prefs.getBool(_notificationsEnabledKey) ?? false;
+      _notificationsEnabled = prefs.getBool(_enabledKey) ?? false;
+      _morningHour = prefs.getInt(_morningHourKey) ?? defaultMorningHour;
+      _eveningHour = prefs.getInt(_eveningHourKey) ?? defaultEveningHour;
 
       _isInitialized = true;
       _error = null;
@@ -60,14 +69,18 @@ class NotificationProvider extends ChangeNotifier {
         }
 
         if (activeGoals != null) {
-          await _notificationService.scheduleNotificationsForGoals(activeGoals);
+          await _notificationService.scheduleNotificationsForGoals(
+            activeGoals,
+            morningHour: _morningHour,
+            eveningHour: _eveningHour,
+          );
         }
       } else {
         await _notificationService.cancelAllNotifications();
       }
 
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_notificationsEnabledKey, enabled);
+      await prefs.setBool(_enabledKey, enabled);
 
       _notificationsEnabled = enabled;
       _error = null;
@@ -80,12 +93,50 @@ class NotificationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setMorningHour(int hour, {List<Goal>? activeGoals}) async {
+    _morningHour = hour;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_morningHourKey, hour);
+    notifyListeners();
+
+    if (_notificationsEnabled && activeGoals != null) {
+      await _rescheduleAll(activeGoals);
+    }
+  }
+
+  Future<void> setEveningHour(int hour, {List<Goal>? activeGoals}) async {
+    _eveningHour = hour;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_eveningHourKey, hour);
+    notifyListeners();
+
+    if (_notificationsEnabled && activeGoals != null) {
+      await _rescheduleAll(activeGoals);
+    }
+  }
+
+  Future<void> _rescheduleAll(List<Goal> goals) async {
+    try {
+      await _notificationService.scheduleNotificationsForGoals(
+        goals,
+        morningHour: _morningHour,
+        eveningHour: _eveningHour,
+      );
+    } catch (e) {
+      debugPrint('Failed to reschedule notifications: $e');
+    }
+  }
+
   Future<void> updateGoalNotifications(Goal goal) async {
     if (!_notificationsEnabled) return;
 
     try {
       if (goal.status == 'active') {
-        await _notificationService.scheduleNotificationsForGoal(goal);
+        await _notificationService.scheduleNotificationsForGoal(
+          goal,
+          morningHour: _morningHour,
+          eveningHour: _eveningHour,
+        );
       } else {
         await _notificationService.cancelNotificationsForGoal(goal);
       }
@@ -98,7 +149,11 @@ class NotificationProvider extends ChangeNotifier {
     if (!_notificationsEnabled) return;
 
     try {
-      await _notificationService.scheduleNotificationsForGoals(goals);
+      await _notificationService.scheduleNotificationsForGoals(
+        goals,
+        morningHour: _morningHour,
+        eveningHour: _eveningHour,
+      );
     } catch (e) {
       debugPrint('Failed to refresh notifications: $e');
     }

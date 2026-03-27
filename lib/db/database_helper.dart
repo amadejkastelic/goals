@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/goal.dart';
@@ -596,7 +597,7 @@ class DatabaseHelper {
   }
 
   Future<void> saveFastingSession(FastingSession session) async {
-    final db = await instance.database;
+    final db = await database;
     if (session.id != null) {
       await db.update(
         'fasting_sessions',
@@ -621,5 +622,65 @@ class DatabaseHelper {
         await db.insert('fasting_sessions', session.toMap());
       }
     }
+  }
+
+  Future<String> getDatabasePath() async {
+    final dbPath = await getDatabasesPath();
+    return join(dbPath, 'goals.db');
+  }
+
+  Future<String> createBackupCopy() async {
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+
+    final dbPath = await getDatabasePath();
+    final dir = File(dbPath).parent.path;
+    final now = DateTime.now();
+    final timestamp =
+        '${now.year}'
+        '${now.month.toString().padLeft(2, '0')}'
+        '${now.day.toString().padLeft(2, '0')}'
+        '_'
+        '${now.hour.toString().padLeft(2, '0')}'
+        '${now.minute.toString().padLeft(2, '0')}';
+    final backupPath = join(dir, 'goals_backup_$timestamp.db');
+
+    await File(dbPath).copy(backupPath);
+    return backupPath;
+  }
+
+  Future<bool> validateBackup(String path) async {
+    Database? testDb;
+    try {
+      testDb = await openDatabase(path, readOnly: true);
+      final tables = await testDb.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='goals'",
+      );
+      if (tables.isEmpty) {
+        await testDb.close();
+        return false;
+      }
+      final version = await testDb.rawQuery('PRAGMA user_version');
+      await testDb.close();
+      final v = version.first['user_version'] as int;
+      return v <= 6;
+    } catch (e) {
+      try {
+        await testDb?.close();
+      } catch (_) {}
+      return false;
+    }
+  }
+
+  Future<void> restoreFromBackup(String sourcePath) async {
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+
+    final dbPath = await getDatabasePath();
+    await File(sourcePath).copy(dbPath);
   }
 }

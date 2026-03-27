@@ -15,8 +15,6 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
   bool _initialized = false;
 
-  static const int morningHour = 9;
-  static const int eveningHour = 18;
   static const int minute = 0;
 
   Future<void> initialize() async {
@@ -73,7 +71,11 @@ class NotificationService {
     return true;
   }
 
-  Future<void> scheduleNotificationsForGoal(Goal goal) async {
+  Future<void> scheduleNotificationsForGoal(
+    Goal goal, {
+    int morningHour = 9,
+    int eveningHour = 18,
+  }) async {
     if (goal.id == null || goal.status != 'active') return;
 
     await cancelNotificationsForGoal(goal);
@@ -104,10 +106,18 @@ class NotificationService {
     await _notifications.cancel(goal.id! * 10 + 2);
   }
 
-  Future<void> scheduleNotificationsForGoals(List<Goal> goals) async {
+  Future<void> scheduleNotificationsForGoals(
+    List<Goal> goals, {
+    int morningHour = 9,
+    int eveningHour = 18,
+  }) async {
     for (final goal in goals) {
       if (goal.status == 'active') {
-        await scheduleNotificationsForGoal(goal);
+        await scheduleNotificationsForGoal(
+          goal,
+          morningHour: morningHour,
+          eveningHour: eveningHour,
+        );
       } else {
         await cancelNotificationsForGoal(goal);
       }
@@ -149,7 +159,7 @@ class NotificationService {
         iOS: const DarwinNotificationDetails(),
         macOS: const DarwinNotificationDetails(),
       ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
       payload: payload,

@@ -13,6 +13,7 @@ import 'providers/fasting_provider.dart';
 import 'theme/app_theme.dart';
 import 'screens/home_screen.dart';
 import 'screens/categories_screen.dart';
+import 'screens/settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,22 +23,35 @@ void main() async {
     databaseFactory = databaseFactoryFfi;
   }
 
+  final themeProvider = ThemeProvider();
+  await themeProvider.loadPrefs();
+
   final notificationProvider = NotificationProvider();
   await notificationProvider.initialize();
 
-  runApp(MyApp(notificationProvider: notificationProvider));
+  runApp(
+    MyApp(
+      themeProvider: themeProvider,
+      notificationProvider: notificationProvider,
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
+  final ThemeProvider themeProvider;
   final NotificationProvider notificationProvider;
 
-  const MyApp({super.key, required this.notificationProvider});
+  const MyApp({
+    super.key,
+    required this.themeProvider,
+    required this.notificationProvider,
+  });
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider.value(value: themeProvider),
         ChangeNotifierProvider(create: (_) => GoalsProvider()),
         ChangeNotifierProvider(create: (_) => CategoriesProvider()),
         ChangeNotifierProvider(create: (_) => JournalProvider()),
@@ -131,6 +145,7 @@ class ThemedApp extends StatelessWidget {
               routes: {
                 '/': (_) => const HomeScreen(),
                 '/categories': (_) => const CategoriesScreen(),
+                '/settings': (_) => const SettingsScreen(),
               },
               initialRoute: '/',
             );

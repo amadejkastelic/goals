@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/goals_provider.dart';
 import '../providers/categories_provider.dart';
-import '../providers/theme_provider.dart';
-import '../providers/notification_provider.dart';
 import '../models/goal.dart';
 import '../widgets/goal_card.dart';
 import '../widgets/status_widgets.dart';
@@ -43,18 +41,12 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('Goals'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            onPressed: () => _showNotificationSettings(context),
-            tooltip: 'Notification settings',
-          ),
-          IconButton(
-            icon: const Icon(Icons.brightness_6),
-            onPressed: () => context.read<ThemeProvider>().toggleTheme(),
-            tooltip: 'Toggle theme',
-          ),
-          IconButton(
             icon: const Icon(Icons.category),
             onPressed: () => Navigator.pushNamed(context, '/categories'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () => Navigator.pushNamed(context, '/settings'),
           ),
         ],
       ),
@@ -245,58 +237,6 @@ class _HomeScreenState extends State<HomeScreen> {
               foregroundColor: Theme.of(context).colorScheme.error,
             ),
             child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showNotificationSettings(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Notifications'),
-        content: Consumer<NotificationProvider>(
-          builder: (context, notificationProvider, _) {
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SwitchListTile(
-                  title: const Text('Daily Reminders'),
-                  subtitle: const Text(
-                    'Get reminded twice daily\n(9 AM & 6 PM)',
-                  ),
-                  value: notificationProvider.notificationsEnabled,
-                  onChanged: notificationProvider.isLoading
-                      ? null
-                      : (value) {
-                          final goalsProvider = context.read<GoalsProvider>();
-                          notificationProvider.setNotificationsEnabled(
-                            value,
-                            activeGoals: goalsProvider.activeGoals,
-                          );
-                        },
-                ),
-                if (notificationProvider.error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      notificationProvider.error!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-              ],
-            );
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close'),
           ),
         ],
       ),

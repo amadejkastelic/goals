@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ThemeProvider with ChangeNotifier {
+  static const _themeModeKey = 'theme_mode';
+  static const _useDynamicColorsKey = 'use_dynamic_colors';
+
   ThemeMode _themeMode = ThemeMode.system;
   ColorScheme? _dynamicLightColorScheme;
   ColorScheme? _dynamicDarkColorScheme;
@@ -14,6 +18,20 @@ class ThemeProvider with ChangeNotifier {
   ColorScheme? get dynamicLightColorScheme => _dynamicLightColorScheme;
   ColorScheme? get dynamicDarkColorScheme => _dynamicDarkColorScheme;
 
+  Future<void> loadPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final modeStr = prefs.getString(_themeModeKey);
+    if (modeStr == 'light') {
+      _themeMode = ThemeMode.light;
+    } else if (modeStr == 'dark') {
+      _themeMode = ThemeMode.dark;
+    } else {
+      _themeMode = ThemeMode.system;
+    }
+    _useDynamicColors = prefs.getBool(_useDynamicColorsKey) ?? true;
+    notifyListeners();
+  }
+
   void setDynamicColorSchemes(ColorScheme? light, ColorScheme? dark) {
     if (_useDynamicColors) {
       _dynamicLightColorScheme = light;
@@ -22,29 +40,37 @@ class ThemeProvider with ChangeNotifier {
     }
   }
 
-  void setThemeMode(ThemeMode mode) {
+  Future<void> setThemeMode(ThemeMode mode) async {
     _themeMode = mode;
     notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    final modeStr = mode == ThemeMode.light
+        ? 'light'
+        : mode == ThemeMode.dark
+        ? 'dark'
+        : 'system';
+    await prefs.setString(_themeModeKey, modeStr);
   }
 
-  void toggleTheme() {
+  Future<void> toggleTheme() async {
     if (_themeMode == ThemeMode.light) {
-      _themeMode = ThemeMode.dark;
+      await setThemeMode(ThemeMode.dark);
     } else if (_themeMode == ThemeMode.dark) {
-      _themeMode = ThemeMode.system;
+      await setThemeMode(ThemeMode.system);
     } else {
-      _themeMode = ThemeMode.light;
+      await setThemeMode(ThemeMode.light);
     }
-    notifyListeners();
   }
 
-  void toggleDynamicColors() {
+  Future<void> toggleDynamicColors() async {
     _useDynamicColors = !_useDynamicColors;
     if (!_useDynamicColors) {
       _dynamicLightColorScheme = null;
       _dynamicDarkColorScheme = null;
     }
     notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_useDynamicColorsKey, _useDynamicColors);
   }
 
   void setLightMode() => setThemeMode(ThemeMode.light);
